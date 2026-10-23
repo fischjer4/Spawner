@@ -1,0 +1,22 @@
+import { contextBridge, ipcRenderer } from 'electron';
+contextBridge.exposeInMainWorld('sidekick', {
+  clearDiagnostics: () => ipcRenderer.invoke('diagnostics:clear'),
+  copyDiagnostics: () => ipcRenderer.invoke('diagnostics:copy'),
+  testJev: (input: unknown) => ipcRenderer.invoke('diagnostics:test', input),
+  state: () => ipcRenderer.invoke('state'),
+  testNotification: () => ipcRenderer.invoke('notifications:test'),
+  saveSettings: (value: unknown) => ipcRenderer.invoke('settings:save', value),
+  environments: () => ipcRenderer.invoke('environments'),
+  checkGateway: () => ipcRenderer.invoke('gateway:check'),
+  chooseWispr: () => ipcRenderer.invoke('wispr:choose'),
+  requestAction: (id: string, revision: number, action: string) => ipcRenderer.invoke('request:action', id, revision, action),
+  action: (id: string, action: string) => ipcRenderer.invoke('task:action', id, action),
+  ask: (question: string) => ipcRenderer.invoke('ask', question),
+  open: (target: string) => ipcRenderer.invoke('open', target),
+  stop: () => ipcRenderer.invoke('audio:stop'),
+  playbackEnded: (id: string, error?: string) => ipcRenderer.send('playback:ended', id, error),
+  onState: (fn: (state: unknown) => void) => { ipcRenderer.on('state', (_e, state) => fn(state)); },
+  onShowTask: (fn: (id?: string) => void) => { ipcRenderer.on('task:show', (_e, id) => fn(id)); },
+  onPlay: (fn: (audio: unknown) => void) => { ipcRenderer.on('audio:play', (_e, audio) => fn(audio)); },
+  onStop: (fn: () => void) => { ipcRenderer.on('audio:stop', fn); },
+});

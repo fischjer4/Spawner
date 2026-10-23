@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Sidekick</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="titlebar"><span>Sidekick</span><span class="titlebar-hint">0.5.1</span></div>
+<div class="app">
+  <aside>
+    <div class="brand"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor"/><path d="M7 11v3m5-7v10m5-8v6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg><span>Sidekick</span></div>
+    <button id="ask-toggle" class="new-task"><span>＋</span> New research <kbd>N</kbd></button>
+    <nav aria-label="Main navigation">
+      <button class="nav-item selected" data-tab="activity"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8l2-4h10l2 4v8H3zM3 10h4l1 2h4l1-2h4"/></svg> Inbox <span id="task-count" class="count">0</span></button>
+      <button class="nav-item" data-tab="history"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8a7 7 0 1 1 1 7M3 3v5h5M10 6v5l3 2"/></svg> History</button>
+    </nav>
+    <div class="aside-bottom">
+      <button class="nav-item" data-tab="diagnostics"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10h4l2-6 4 12 2-6h4"/></svg> Diagnostics</button>
+      <button class="nav-item" data-tab="settings"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14M7 3v4M13 8v4M8 13v4"/></svg> Settings <span id="setup-dot" class="setup-dot"></span></button>
+      <div class="environment-mark"><span class="environment-avatar">S</span><div><strong id="sidebar-environment">Your workspace</strong><small>Replicas environment</small></div></div>
+    </div>
+  </aside>
+  <main>
+    <div class="topline"><span id="page-title">Inbox</span><div class="listener-controls"><div id="status-pill" class="status-pill"><i></i><span>Starting…</span></div><button id="pause" class="quiet-button">Pause</button></div></div>
+    <div id="settings-tabs" class="settings-tabs hidden" role="tablist" aria-label="Settings"><button data-tab="connections" role="tab">Connections</button><button data-tab="preferences" role="tab">Preferences</button></div>
+    <section id="request-capture" class="request-capture hidden" aria-label="Current voice requests"></section>
+    <section id="activity" class="page active" aria-label="Inbox">
+      <div class="page-heading"><div><h1 id="inbox-heading">Inbox</h1><p id="inbox-description" class="intro">Your agents, without the noise.</p></div><button id="archive-completed" class="secondary compact">Archive finished</button></div>
+      <div id="setup-banner" class="setup-banner"><div><strong>Connect your tools to get started.</strong><p>Add your keys and choose an agent environment.</p></div><button class="primary compact" data-go="connections">Connect tools</button></div>
+      <form id="ask-form" class="ask-form hidden"><div class="form-title"><strong>New research</strong><button id="ask-close" type="button" class="icon-button" aria-label="Close new research">×</button></div><label for="question">What should Replicas investigate?</label><textarea id="question" rows="3" maxlength="6000" placeholder="Ask a question or describe what to explore…" required></textarea><div class="form-bottom"><small>For implementation, dictate “Replicas, build…” in Wispr.</small><button class="primary compact" type="submit">Start research <span>↗</span></button></div></form>
+      <div id="detection" class="detection hidden" role="status"><span class="detection-dot"></span><div><strong id="detection-message"></strong><p id="detection-request"></p></div></div>
+      <div id="tasks"></div>
+      <div id="empty" class="empty-state"><div class="empty-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 14l3-7h14l3 7v11H6zM6 16h6l2 3h4l2-3h6"/></svg></div><h2 id="empty-title">Nothing needs your attention.</h2><p id="empty-description">Ask Replicas to research or build something.<br>We’ll let you know when it’s ready.</p><div id="voice-examples" class="voice-examples"><span>Try saying</span><p>“Replicas, go research this.”</p><p>“Replicas, build a notification bell.”</p></div></div>
+      <div id="inbox-footer" class="activity-footer"><span class="tiny-dot"></span><span id="activity-message">Listening for new requests through Wispr.</span><button class="text-button" data-go="diagnostics">View diagnostics <span>↗</span></button></div>
+    </section>
+    <section id="diagnostics" class="page" aria-label="Diagnostics">
+      <div class="trace-console">
+        <div class="trace-console-header">
+          <h2 id="diagnostic-mode">Latest run</h2>
+          <button id="diagnostic-latest" class="text-button hidden">Back to latest</button>
+          <select id="diagnostic-selection" aria-label="Run history"><option value="latest">Latest run</option></select>
+        </div>
+        <div id="diagnostic-flow"></div>
+        <details class="diagnostic-tools"><summary>Debug tools</summary>
+        <div class="diagnostic-tools-status"><span id="diagnostic-health"></span><span id="diagnostic-poll"></span></div>
+        <div class="diagnostic-tools-actions"><button id="copy-diagnostics" class="text-button">Copy log</button><button id="clear-diagnostics" class="text-button">Clear history</button></div>
+        <div id="diagnostic-reads"></div>
+      <details class="diagnostic-test"><summary>Try a phrase · Jev only</summary>
+        <form id="diagnostic-test-form"><label for="diagnostic-context">Conversation context</label><textarea id="diagnostic-context" rows="2" maxlength="18000" placeholder="We’re discussing whether Electron can keep a menu-bar app running with no windows."></textarea>
+        <label for="diagnostic-request">What you’d say</label><textarea id="diagnostic-request" rows="2" maxlength="6000" required>Replicas: could you go research that and come back to me with an answer?</textarea>
+        <div class="form-bottom"><small>Calls Jev through Gateway. Never starts research.</small><button class="primary compact" type="submit">Test Jev only</button></div></form>
+      </details>
+        <p class="trace-privacy">History clears when Sidekick quits. Copy log includes transcripts and prompts, never keys.</p>
+        </details>
+      </div>
+    </section>
+    <section id="connections" class="page" aria-label="Connections">
+      <h1>Connections</h1><p class="intro">The tools behind your Sidekick.</p>
+      <div class="connection-card"><div class="card-heading"><div><h2>AI Gateway</h2><p>Jev understands the request. Optional voice reads answers to you.</p></div><span id="gateway-status" class="badge">Not connected</span></div>
+        <form id="gateway-form"><label for="gateway-key">Vercel AI Gateway key</label><div class="input-row"><input id="gateway-key" type="password" autocomplete="off" placeholder="Paste your Gateway key" spellcheck="false"><button class="primary compact" type="submit">Save key</button></div></form><div class="card-actions"><button class="text-button" data-open="gateway">Get a key ↗</button><button id="gateway-check" class="text-button">Test Jev connection</button><button id="gateway-disconnect" class="text-button muted">Disconnect</button></div>
+      </div>
+      <div class="connection-card"><div class="card-heading"><div><h2>Replicas</h2><p>Your agent researches or implements in the environment you choose.</p></div><span id="replicas-status" class="badge">Not connected</span></div>
+        <form id="replicas-form"><label for="replicas-key">Personal Replicas API key</label><div class="input-row"><input id="replicas-key" type="password" autocomplete="off" placeholder="Paste your Replicas key" spellcheck="false"><button class="primary compact" type="submit">Save key</button></div></form>
+        <div class="environment-row"><label for="environment">Agent environment</label><div class="input-row"><select id="environment"><option value="">Connect Replicas to choose</option></select><button id="load-environments" class="secondary compact">Refresh</button></div></div>
+        <div class="card-actions"><button class="text-button" data-open="replicas">Open Replicas ↗</button><span class="helper-text">Personal → API Keys</span><button id="replicas-disconnect" class="text-button muted">Disconnect</button></div>
+      </div>
+      <div class="note"><strong>Answers arrive quietly.</strong><p>Sidekick notifies you when an agent’s response is ready. Read the answer here, or choose <strong>Read to me</strong> to play a short summary through your Mac’s current audio output. Use headphones during calls.</p></div>
+      <p class="privacy-note">Keys are encrypted with a key protected by macOS Keychain. Recent conversation is sent to AI Gateway when a request is detected; your original request and relevant context go to Replicas. Your raw audio stays with Wispr.</p>
+    </section>
+    <section id="preferences" class="page" aria-label="Preferences">
+      <h1>Preferences</h1><p class="intro">Sidekick stays in the menu bar when you close this window.</p>
+      <div class="connection-card"><label class="switch-row"><div><strong>Start when I log in</strong><p>Ready for calls and dictation without opening the app.</p></div><input type="checkbox" id="login" role="switch"></label><label class="switch-row"><div><strong>Watch Wispr meetings and dictation</strong><p>Only new speech triggers tasks. Dictation uses the completed phrase.</p></div><input type="checkbox" id="listening" role="switch"></label></div>
+      <div class="connection-card"><h2>Wispr Flow</h2><label for="wispr-path">Local data folder</label><div class="input-row"><input id="wispr-path" readonly><button id="choose-wispr" class="secondary compact">Choose…</button></div><p id="wispr-status" class="helper-text"></p><p class="helper-text">Turn on Live Transcript in Wispr before recording. Its local transcript saves after a short pause, so requests may take a few seconds to arrive.</p></div>
+      <div class="connection-card"><h2>Notifications</h2><p>When a task finishes, a quiet macOS notification lets you review the answer or choose <strong>Read to me</strong>. Speech starts only when you click.</p><div class="card-actions"><button id="test-notification" class="secondary compact">Send test notification</button><button class="text-button" data-open="notification-settings">macOS notification settings ↗</button></div><p class="helper-text">Allow Sidekick notifications and choose Banners or Alerts. macOS may tuck the buttons under Options. Focus and screen-sharing settings can hide banners during calls.</p></div>
+      <form id="models-form" class="connection-card"><h2>Models & voice</h2><p class="helper-text">These models use your AI Gateway account.</p><label for="decision-model">Jev decision model</label><input id="decision-model" required><label for="text-model">Response summary model</label><input id="text-model" required><label for="speech-model">Speech model</label><input id="speech-model" required><label for="voice">Voice</label><input id="voice" required><div class="card-actions"><button class="primary compact" type="submit">Save preferences</button></div></form>
+      <div class="note"><strong>Always within reach.</strong><p>Press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>.</kbd> to stop speaking immediately. Pausing listening doesn’t cancel research already running.</p><p>Requests addressed to T3 are saved for your attention. They aren’t sent to Replicas.</p><button class="text-button" data-open="data">Open local app data ↗</button></div>
+    </section>
+  </main>
+</div>
+<div id="task-overlay" class="task-overlay hidden"><button id="drawer-backdrop" class="drawer-backdrop" tabindex="-1" aria-label="Close task"></button><section id="task-detail" class="task-detail" role="dialog" aria-modal="true" aria-label="Task details" tabindex="-1"></section></div>
+<div id="playback" class="playback hidden"><span class="voice-bars">▂ ▆ ▃ ▇ ▄</span><span id="playback-label">Reading to you</span><button id="stop-audio">Stop <kbd>⌘ ⇧ .</kbd></button></div>
+<div id="toast" role="status" aria-live="polite" class="toast hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>

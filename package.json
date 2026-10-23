@@ -1,0 +1,56 @@
+{
+  "name": "sidekick-call-assistant",
+  "version": "0.5.1",
+  "description": "A quiet research companion for your Zoom calls",
+  "author": "Jeremy Fischer",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && node scripts/start.mjs",
+    "check": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "package": "npm run build && electron-builder --mac dir --arm64",
+    "smoke": "npm run build && node scripts/start.mjs --smoke-test",
+    "eval": "node scripts/run-evals.mjs run --noCache --outputPath results/latest.json",
+    "eval:ui": "node scripts/run-evals.mjs serve --noCache",
+    "check:evals": "tsc --noEmit -p evals/tsconfig.json"
+  },
+  "dependencies": {
+    "@ai-sdk/gateway": "4.0.121",
+    "ai": "7.0.148",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "45.0.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "build": {
+    "appId": "com.jeremyfischer.sidekick",
+    "productName": "Sidekick",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/main.cjs",
+      "dist/preload.cjs",
+      "dist/main.cjs.map",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": false,
+      "identity": null,
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    }
+  }
+}

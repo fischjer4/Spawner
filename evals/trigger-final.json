@@ -1,0 +1,751 @@
+{
+  "decisionModel": "typesafe-ai/jev-1.14.0",
+  "textModel": "openai/gpt-6-luna-fast",
+  "invocationThreshold": 0.8,
+  "completenessThreshold": 0.7,
+  "boundary": "real Wispr file watcher, Jev, brief generation; remote creation substituted with a counter",
+  "results": [
+    {
+      "name": "reported wording alone",
+      "trial": 1,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Can someone change jobs before the next stage is approved?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas: could you go research that and come back to me with an answer?",
+        "message": "Research request recognized.",
+        "at": 1792685380721
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas: could you go research that and come back to me with an answer?",
+          "decision": {
+            "invoked": 0.92,
+            "complete": 0.88,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reported wording followed by casual conversation",
+      "trial": 1,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Can someone change jobs before the next stage is approved?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas: could you go research that and come back to me with an answer? So, that’d be really cool if that worked out. I guess we’ll see what happens, though. TBD?",
+        "message": "Research request recognized.",
+        "at": 1792685384921
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas: could you go research that and come back to me with an answer? So, that’d be really cool if that worked out. I guess we’ll see what happens, though. TBD?",
+          "decision": {
+            "invoked": 0.96,
+            "complete": 0.83,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "short contextual request",
+      "trial": 1,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Can someone change jobs after an application is approved?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, go find out about that.",
+        "message": "Research request recognized.",
+        "at": 1792685389257
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, go find out about that.",
+          "decision": {
+            "invoked": 0.93,
+            "complete": 0.79,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "explicit question",
+      "trial": 1,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Does Electron support macOS menu-bar icons?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, check whether Electron supports macOS menu-bar icons.",
+        "message": "Research request recognized.",
+        "at": 1792685394390
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, check whether Electron supports macOS menu-bar icons.",
+          "decision": {
+            "invoked": 0.9,
+            "complete": 0.88,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "split unfinished request",
+      "trial": 1,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Does Electron support macOS menu-bar icons?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, go find out whether Electron supports macOS menu-bar icons.",
+        "message": "Research request recognized.",
+        "at": 1792685400275
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, go find out whether",
+          "decision": {
+            "invoked": 0.85,
+            "complete": 0.15,
+            "destination": "replicas",
+            "action": "research"
+          }
+        },
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, go find out whether Electron supports macOS menu-bar icons.",
+          "decision": {
+            "invoked": 0.94,
+            "complete": 0.91,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "quoted example",
+      "trial": 1,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: The example phrase is “Replicas, go research that.” I’m describing the feature, not asking for research.",
+        "message": "Jev did not confirm a direct request (7% request score). No research started.",
+        "at": 1792685405726
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: The example phrase is “Replicas, go research that.” I’m describing the feature, not asking for research.",
+          "decision": {
+            "invoked": 0.07,
+            "complete": 0.48,
+            "destination": "replicas",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hypothetical request",
+      "trial": 1,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: If we asked Replicas to research that, would it take long? We aren’t asking it to do that now.",
+        "message": "Jev did not confirm a direct request (2% request score). No research started.",
+        "at": 1792685407644
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: If we asked Replicas to research that, would it take long? We aren’t asking it to do that now.",
+          "decision": {
+            "invoked": 0.02,
+            "complete": 0.51,
+            "destination": "replicas",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "negated request",
+      "trial": 1,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, do not research this. I’m still deciding what I want to ask.",
+        "message": "Jev did not confirm a direct request (94% request score). No research started.",
+        "at": 1792685409485
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, do not research this. I’m still deciding what I want to ask.",
+          "decision": {
+            "invoked": 0.94,
+            "complete": 0.84,
+            "destination": "replicas",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "request explicitly withdrawn",
+      "trial": 1,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas: could you go research that and come back to me with an answer? Actually, never mind. Don’t research that.",
+        "message": "Jev did not confirm a direct request (52% request score). No research started.",
+        "at": 1792685411346
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas: could you go research that and come back to me with an answer? Actually, never mind. Don’t research that.",
+          "decision": {
+            "invoked": 0.52,
+            "complete": 0.83,
+            "destination": "replicas",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "explicit cancellation",
+      "trial": 1,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": true,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "cancelled"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, stop the research you already started.",
+        "message": "Cancellation request recognized.",
+        "at": 1792685413153
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, stop the research you already started.",
+          "decision": {
+            "invoked": 0.95,
+            "complete": 0.96,
+            "destination": "replicas",
+            "action": "cancel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "old request mentioned as history",
+      "trial": 1,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas already researched this yesterday. I’m just reading its answer now.",
+        "message": "Jev did not confirm a direct request (2% request score). No research started.",
+        "at": 1792685464998
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas already researched this yesterday. I’m just reading its answer now.",
+          "decision": {
+            "invoked": 0.02,
+            "complete": 0.32,
+            "destination": "none",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reported wording alone",
+      "trial": 2,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Can someone change jobs before the next stage is approved?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas: could you go research that and come back to me with an answer?",
+        "message": "Research request recognized.",
+        "at": 1792685466825
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas: could you go research that and come back to me with an answer?",
+          "decision": {
+            "invoked": 0.95,
+            "complete": 0.89,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reported wording followed by casual conversation",
+      "trial": 2,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Can someone change jobs before the next stage is approved?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas: could you go research that and come back to me with an answer? So, that’d be really cool if that worked out. I guess we’ll see what happens, though. TBD?",
+        "message": "Research request recognized.",
+        "at": 1792685471526
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas: could you go research that and come back to me with an answer? So, that’d be really cool if that worked out. I guess we’ll see what happens, though. TBD?",
+          "decision": {
+            "invoked": 0.97,
+            "complete": 0.84,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "short contextual request",
+      "trial": 2,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Can someone change jobs between approval stages?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, go find out about that.",
+        "message": "Research request recognized.",
+        "at": 1792685480443
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, go find out about that.",
+          "decision": {
+            "invoked": 0.94,
+            "complete": 0.75,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "explicit question",
+      "trial": 2,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Does Electron support macOS menu-bar icons?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, check whether Electron supports macOS menu-bar icons.",
+        "message": "Research request recognized.",
+        "at": 1792685484562
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, check whether Electron supports macOS menu-bar icons.",
+          "decision": {
+            "invoked": 0.9,
+            "complete": 0.88,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "split unfinished request",
+      "trial": 2,
+      "expectedLaunch": true,
+      "launches": 1,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Does Electron support macOS menu-bar icons?",
+          "status": "researching"
+        },
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, go find out whether Electron supports macOS menu-bar icons.",
+        "message": "Research request recognized.",
+        "at": 1792685491144
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, go find out whether",
+          "decision": {
+            "invoked": 0.84,
+            "complete": 0.18,
+            "destination": "replicas",
+            "action": "research"
+          }
+        },
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, go find out whether Electron supports macOS menu-bar icons.",
+          "decision": {
+            "invoked": 0.93,
+            "complete": 0.9,
+            "destination": "replicas",
+            "action": "research"
+          }
+        }
+      ]
+    },
+    {
+      "name": "quoted example",
+      "trial": 2,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: The example phrase is “Replicas, go research that.” I’m describing the feature, not asking for research.",
+        "message": "Jev did not confirm a direct request (5% request score). No research started.",
+        "at": 1792685496582
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: The example phrase is “Replicas, go research that.” I’m describing the feature, not asking for research.",
+          "decision": {
+            "invoked": 0.05,
+            "complete": 0.46,
+            "destination": "replicas",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hypothetical request",
+      "trial": 2,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: If we asked Replicas to research that, would it take long? We aren’t asking it to do that now.",
+        "message": "Jev did not confirm a direct request (2% request score). No research started.",
+        "at": 1792685498436
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: If we asked Replicas to research that, would it take long? We aren’t asking it to do that now.",
+          "decision": {
+            "invoked": 0.02,
+            "complete": 0.52,
+            "destination": "replicas",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "negated request",
+      "trial": 2,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, do not research this. I’m still deciding what I want to ask.",
+        "message": "Jev did not confirm a direct request (90% request score). No research started.",
+        "at": 1792685500246
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, do not research this. I’m still deciding what I want to ask.",
+          "decision": {
+            "invoked": 0.9,
+            "complete": 0.87,
+            "destination": "replicas",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "request explicitly withdrawn",
+      "trial": 2,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas: could you go research that and come back to me with an answer? Actually, never mind. Don’t research that.",
+        "message": "Jev did not confirm a direct request (62% request score). No research started.",
+        "at": 1792685502182
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas: could you go research that and come back to me with an answer? Actually, never mind. Don’t research that.",
+          "decision": {
+            "invoked": 0.62,
+            "complete": 0.8,
+            "destination": "replicas",
+            "action": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "explicit cancellation",
+      "trial": 2,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": true,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "cancelled"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas, stop the research you already started.",
+        "message": "Cancellation request recognized.",
+        "at": 1792685503996
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas, stop the research you already started.",
+          "decision": {
+            "invoked": 0.94,
+            "complete": 0.96,
+            "destination": "replicas",
+            "action": "cancel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "old request mentioned as history",
+      "trial": 2,
+      "expectedLaunch": false,
+      "launches": 0,
+      "cancelled": false,
+      "passed": true,
+      "tasks": [
+        {
+          "title": "Existing unrelated research",
+          "status": "researching"
+        }
+      ],
+      "detection": {
+        "request": "You: Replicas already researched this yesterday. I’m just reading its answer now.",
+        "message": "Jev did not confirm a direct request (1% request score). No research started.",
+        "at": 1792685555661
+      },
+      "trace": [
+        {
+          "context": "You: We are discussing whether an approved application lets someone change jobs before the next stage is approved.",
+          "request": "You: Replicas already researched this yesterday. I’m just reading its answer now.",
+          "decision": {
+            "invoked": 0.01,
+            "complete": 0.38,
+            "destination": "none",
+            "action": "none"
+          }
+        }
+      ]
+    }
+  ]
+}

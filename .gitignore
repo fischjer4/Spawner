@@ -1,0 +1,9 @@
+node_modules/
+dist/
+release/
+*.log
+.env*
+.DS_Store
+evals/results/*.sqlite*
+evals/results/*.json
+evals/results/site/

@@ -47,10 +47,7 @@
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns",
       "hardenedRuntime": false,
-      "identity": null,
-      "extendInfo": {
-        "LSUIElement": true
-      }
+      "identity": null
     }
   }
 }

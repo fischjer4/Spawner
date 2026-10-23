@@ -4,7 +4,7 @@ A personal macOS menu-bar companion for Zoom calls. It watches Wispr Flow's meet
 
 ## Use the app
 
-Open **Sidekick.app**. It stays in the menu bar when its window closes and can start at login.
+Open **Sidekick.app**. It stays running in the Dock and menu bar when its window closes and can start at login. Click its Dock icon to reopen the window, or right-click the icon and choose **Quit** to stop Sidekick.
 
 1. In **Settings → Connections**, save a Vercel AI Gateway key and a **personal Replicas API key**. Test Jev, refresh environments, and choose your agent environment.
 2. For meetings, turn on **Live Transcript in Wispr before recording**. Or use your usual **Wispr dictation hotkey** and say the complete command, such as “Replicas, research whether Electron supports menu-bar apps.” No Notetaker session is needed for dictation. Sidekick ignores existing history at startup and handles each new completed dictation once.

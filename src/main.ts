@@ -42,7 +42,12 @@ const links: Record<string, string> = {
   gateway: 'https://vercel.com/dashboard/ai-gateway',
   replicas: 'https://app.replicas.dev',
 };
-function show() { if (smoke && !process.argv.includes('--design-preview')) return; window.show(); window.focus(); }
+function show() {
+  if (smoke && !process.argv.includes('--design-preview')) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
 function showTask(id?: string) {
   show();
   window.webContents.send('state', engine.snapshot());
@@ -203,7 +208,6 @@ if (!app.requestSingleInstanceLock() && !smoke) app.quit();
 else {
   app.on('second-instance', () => show());
   app.whenReady().then(async () => {
-    app.dock?.hide();
     await mkdir(app.getPath('userData'), { recursive: true, mode: 0o700 });
     store = new Store(app.getPath('userData'));
     await loadSecrets();
@@ -235,6 +239,7 @@ else {
     engine.onStopAudio = () => window.webContents.send('audio:stop');
     registerIPC();
     await window.loadFile(join(app.getAppPath(), 'renderer/index.html'));
+    app.on('activate', show);
     if (app.isPackaged && !smoke) {
       // Notification Center can be slow to respond; it must not delay the window.
       void Notification.getHistory().then(history => {

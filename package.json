@@ -1,6 +1,6 @@
 {
   "name": "sidekick-call-assistant",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "A quiet research companion for your Zoom calls",
   "author": "Jeremy Fischer",
   "private": true,

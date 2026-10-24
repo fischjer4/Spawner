@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { Store } from './store.js';
 import { Engine } from './engine.js';
 import { Models, Replicas, replicaLink } from './services.js';
+import { T3, t3ConnectionSchema, type T3Connection } from './t3.js';
 import type { Settings } from './types.js';
 
 const smoke = process.argv.includes('--smoke-test');
@@ -16,24 +17,26 @@ app.setName('Sidekick');
 let window: BrowserWindow;
 let tray: Tray;
 let engine: Engine;
+let t3: T3;
 let store: Store;
 let timer: NodeJS.Timeout;
 let quitting = false;
 let lastTrayStatus = '';
 let broadcastTimer: NodeJS.Timeout | undefined;
 const notifications = new Map<string, Notification>();
-let secrets: { gateway: string; replicas: string } = { gateway: '', replicas: '' };
+let secrets: { gateway: string; replicas: string; t3?: T3Connection } = { gateway: '', replicas: '' };
 let secretProblem = '';
 const defaults: Settings = {
   enabled: true, launchAtLogin: true,
   wisprDirectory: join(homedir(), 'Library/Application Support/Wispr Flow'),
-  environmentId: '', environmentName: '', decisionModel: 'typesafe-ai/jev-1.14.0',
+  environmentId: '', environmentName: '', t3ProjectId: '', t3ProjectName: '', decisionModel: 'typesafe-ai/jev-1.14.0',
   textModel: 'google/gemini-2.5-flash', speechModel: 'google/gemini-3.8-flash-lite-tts', voice: 'Kore',
 };
 const settingsSchema = z.object({
   enabled: z.boolean().optional(), launchAtLogin: z.boolean().optional(),
   wisprDirectory: z.string().min(1).max(1000).optional(),
   environmentId: z.string().max(200).optional(), environmentName: z.string().max(200).optional(),
+  t3ProjectId: z.string().max(200).optional(), t3ProjectName: z.string().max(200).optional(),
   decisionModel: z.string().min(1).max(200).optional(), textModel: z.string().min(1).max(200).optional(),
   speechModel: z.string().min(1).max(200).optional(), voice: z.string().min(1).max(200).optional(),
   gatewayKey: z.string().max(1000).optional(), replicasKey: z.string().max(1000).optional(),
@@ -91,7 +94,7 @@ async function loadSecrets(): Promise<void> {
   if (!existsSync(file)) return;
   try {
     const decrypted = await safeStorage.decryptStringAsync(await readFile(file));
-    secrets = z.object({ gateway: z.string(), replicas: z.string() }).parse(JSON.parse(decrypted.result));
+    secrets = z.object({ gateway: z.string(), replicas: z.string(), t3: t3ConnectionSchema.optional() }).parse(JSON.parse(decrypted.result));
   } catch { secretProblem = 'Credentials could not be unlocked. Reconnect them in Settings.'; }
 }
 async function saveSecrets(next: typeof secrets): Promise<void> {
@@ -145,7 +148,7 @@ function registerIPC() {
   });
   handle('settings:save', async (input: unknown) => {
     const { gatewayKey, replicasKey, ...patch } = settingsSchema.parse(input);
-    if (gatewayKey !== undefined || replicasKey !== undefined) await saveSecrets({ gateway: gatewayKey?.trim() ?? secrets.gateway, replicas: replicasKey?.trim() ?? secrets.replicas });
+    if (gatewayKey !== undefined || replicasKey !== undefined) await saveSecrets({ ...secrets, gateway: gatewayKey?.trim() ?? secrets.gateway, replicas: replicasKey?.trim() ?? secrets.replicas });
     const next = { ...engine.settings, ...patch };
     if (patch.wisprDirectory && !resolve(patch.wisprDirectory).startsWith('/')) throw new Error('Choose an absolute folder path.');
     engine.updateSettings(next);
@@ -153,6 +156,17 @@ function registerIPC() {
     return engine.snapshot();
   });
   handle('environments', () => new Replicas(() => secrets.replicas).environments());
+  handle('t3:connect', async () => {
+    await t3.connect();
+    const projects = await t3.projects();
+    broadcast();
+    return projects.map(({ id, title, workspaceRoot, modelSelection }) => ({ id, title, workspaceRoot, model: modelSelection?.model ?? null }));
+  });
+  handle('t3:disconnect', async () => {
+    await saveSecrets({ ...secrets, t3: undefined });
+    engine.updateSettings({ ...engine.settings, t3ProjectId: '', t3ProjectName: '' });
+    return engine.snapshot();
+  });
   handle('gateway:check', async () => {
     if (!secrets.gateway) throw new Error('Save your Gateway key first.');
     try {
@@ -170,7 +184,7 @@ function registerIPC() {
     return engine.snapshot();
   });
   handle('audio:stop', () => { engine.stopSpeech(); });
-  handle('ask', (question: unknown) => engine.startManual(z.string().trim().min(3).max(6000).parse(question)));
+  handle('ask', (question: unknown, destination: unknown) => engine.startManual(z.string().trim().min(3).max(6000).parse(question), z.enum(['replicas', 't3']).default('replicas').parse(destination)));
   handle('task:action', async (id: unknown, action: unknown) => {
     const taskId = z.string().uuid().parse(id);
     switch (action) {
@@ -182,6 +196,7 @@ function registerIPC() {
       case 'restore': return engine.archive(taskId, false);
       case 'open': {
         const task = engine.tasks.find(task => task.id === taskId);
+        if (task?.destination === 't3') return t3.open();
         if (!task?.replicaId) return openLink('replicas');
         return shell.openExternal(replicaLink(task.replicaId));
       }
@@ -198,6 +213,7 @@ async function openLink(target: string) {
   if (target === 'notification-settings') return shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings.extension');
   const known = links[target];
   if (known) return shell.openExternal(known);
+  if (target === 't3') return t3.open();
   if (target === 'data') return shell.openPath(app.getPath('userData'));
   const url = new URL(target);
   if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Only web links can be opened.');
@@ -213,7 +229,8 @@ else {
     await loadSecrets();
     const settings = store.settings(defaults);
     const models = new Models(() => secrets.gateway, () => engine.settings);
-    engine = new Engine(settings, store, () => ({ gateway: !!secrets.gateway, replicas: !!secrets.replicas }), models, new Replicas(() => secrets.replicas));
+    t3 = new T3(() => secrets.t3, value => saveSecrets({ ...secrets, t3: value }));
+    engine = new Engine(settings, store, () => ({ gateway: !!secrets.gateway, replicas: !!secrets.replicas, t3: !!secrets.t3 }), models, new Replicas(() => secrets.replicas), undefined, t3);
     if (secretProblem) engine.activity = secretProblem;
     nativeTheme.themeSource = 'light';
     window = new BrowserWindow({

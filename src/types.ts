@@ -8,6 +8,8 @@ export interface Settings {
   textModel: string;
   speechModel: string;
   voice: string;
+  t3ProjectId?: string;
+  t3ProjectName?: string;
 }
 export interface Entry {
   id: string;
@@ -26,6 +28,10 @@ export interface Meeting {
 export type TaskStatus = 'starting' | 'researching' | 'ready' | 'speaking' | 'delivered' | 'needs_attention' | 'failed' | 'cancelled';
 export type TaskMode = 'research' | 'implementation';
 export interface ResearchTask {
+  destination?: 'replicas' | 't3';
+  t3ThreadId?: string;
+  t3EnvironmentId?: string;
+  t3ProjectId?: string;
   mode?: TaskMode;
   id: string;
   meetingId: string;
@@ -94,7 +100,7 @@ export interface PendingRequest {
 export interface AppState {
   requests: PendingRequest[];
   settings: Settings;
-  credentials: { gateway: boolean; replicas: boolean };
+  credentials: { gateway: boolean; replicas: boolean; t3?: boolean };
   meeting: { id: string; title: string; lastSpeechAt: number } | null;
   tasks: ResearchTask[];
   watcher: { connected: boolean; message: string };

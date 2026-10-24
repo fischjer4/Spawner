@@ -13,6 +13,7 @@ let drawerCloseTimer;
 const expandedAnswers = new Map();
 const openDiagnostics = new Set();
 let preferencesLoaded = false;
+let t3Projects = [];
 const requestNodes = new Map();
 let audio;
 let audioId;
@@ -95,7 +96,7 @@ function renderTasks() {
   $('archive-completed').classList.toggle('hidden', history || !inbox.some(task => ['ready', 'delivered', 'cancelled'].includes(task.status)));
   $('empty').classList.toggle('hidden', tasks.length > 0 || (!history && !!state.requests?.length));
   $('empty-title').textContent = history ? 'No archived tasks yet.' : 'Nothing needs your attention.';
-  $('empty-description').textContent = history ? 'Archive a finished task to keep it here.' : 'Ask Replicas to research or build something. We’ll let you know when it’s ready.';
+  $('empty-description').textContent = history ? 'Archive a finished task to keep it here.' : 'Ask Replicas or T3 to research or build something. We’ll let you know when it’s ready.';
   $('voice-examples').classList.toggle('hidden', history);
   $('inbox-footer').classList.toggle('hidden', history);
   $('detection').classList.toggle('hidden', history || !!state.requests?.length || !state.detection || Date.now() - state.detection.at > 30000);
@@ -179,16 +180,17 @@ function renderTaskDetail() {
   const card = element('article', 'task'); card.id = `task-${task.id}`;
   card.append(element('h2', '', task.title));
   const meta = element('div', 'task-meta');
-  meta.append(element('span', `task-status${['failed', 'needs_attention'].includes(task.status) ? ' error' : ''}`, statusLabel(task)), element('span', '', `${taskDate(task)} · Replicas ${task.mode === 'implementation' ? 'implementation' : 'research'}`));
+  meta.append(element('span', `task-status${['failed', 'needs_attention'].includes(task.status) ? ' error' : ''}`, statusLabel(task)), element('span', '', `${taskDate(task)} · ${task.destination === 't3' ? 'T3 Code · local' : 'Replicas'} ${task.mode === 'implementation' ? 'implementation' : 'research'}`));
   card.append(meta);
   const actions = element('div', 'task-actions');
   if ((task.spokenAnswer || task.answer) && ['ready', 'delivered'].includes(task.status)) {
     const read = actionButton(state.playing === task.id ? 'Preparing…' : '▶ Read to me', () => call(api.action(task.id, 'speak')), 'primary compact');
     read.disabled = !!state.playing; actions.append(read);
   }
-  if (['starting', 'researching'].includes(task.status)) actions.append(actionButton('Cancel task', () => call(api.action(task.id, 'cancel')), 'secondary compact'));
+  if (['starting', 'researching'].includes(task.status) || (task.destination === 't3' && task.t3ThreadId && task.status === 'needs_attention')) actions.append(actionButton('Cancel task', () => call(api.action(task.id, 'cancel')), 'secondary compact'));
   if (task.status === 'speaking') actions.append(actionButton('Stop speaking', () => call(api.stop()), 'secondary compact'));
-  if (task.replicaId || task.workspaceName) actions.append(actionButton('Continue in Replicas ↗', () => call(api.action(task.id, 'open'))));
+  if (task.destination === 't3') actions.append(actionButton('Open T3 Code ↗', () => call(api.action(task.id, 'open'))));
+  else if (task.replicaId || task.workspaceName) actions.append(actionButton('Continue in Replicas ↗', () => call(api.action(task.id, 'open'))));
   if (['needs_attention', 'failed', 'researching'].includes(task.status) || task.error) actions.append(actionButton('Refresh', () => call(api.action(task.id, 'refresh'))));
   if (!activeStatuses.includes(task.status)) actions.append(actionButton(isArchived(task) ? 'Move to Inbox' : 'Archive', async () => { await call(api.action(task.id, isArchived(task) ? 'restore' : 'archive')); closeTask(); toast(isArchived(task) ? 'Moved to Inbox.' : 'Archived. You can find it in History.'); }, 'text-button muted'));
   card.append(actions);
@@ -269,9 +271,10 @@ function renderDiagnostics() {
   const decision = returned?.data?.decision;
   const gate = checkEvents.findLast(event => event.stage === 'Gate');
   const task = state.tasks.find(item => item.id === run?.taskId);
-  const confirmed = events.find(event => event.stage === 'Replicas' && event.status === 'ok' && event.data?.replicaId);
-  const handoff = events.find(event => event.stage === 'Replicas' && event.status === 'pending' && event.data?.message);
-  const replicaId = task?.replicaId || confirmed?.data?.replicaId;
+  const provider = task?.destination === 't3' || decision?.destination === 't3' ? 'T3 Code' : 'Replicas';
+  const confirmed = events.find(event => ['Replicas', 'T3'].includes(event.stage) && event.status === 'ok' && (event.data?.replicaId || event.data?.threadId));
+  const handoff = events.find(event => ['Replicas', 'T3'].includes(event.stage) && event.status === 'pending' && event.data?.message);
+  const replicaId = task?.replicaId || confirmed?.data?.replicaId || confirmed?.data?.threadId;
   const request = sent?.data?.state?.candidateUtterances;
   const context = sent?.data?.state?.previousConversation;
   const transcriptEvents = events.filter(event => event.stage === 'Transcript');
@@ -301,7 +304,7 @@ function renderDiagnostics() {
   }
   const candidate = element('div', 'jev-request');
   const freshText = read?.entries.filter(entry => read.freshIds.includes(entry.id)).map(entry => `${entry.speaker}: ${entry.text.trim()}`).join('\n');
-  candidate.append(element('p', '', sent ? request || 'No input was recorded for this check.' : run?.request || freshText || 'Waiting for new speech. Say “Replicas” followed by your request.'));
+  candidate.append(element('p', '', sent ? request || 'No input was recorded for this check.' : run?.request || freshText || 'Waiting for new speech. Say “Replicas” or “T3” followed by your request.'));
   inputSection.append(candidate);
   if (context) {
     const earlier = element('details', 'jev-context');
@@ -316,7 +319,7 @@ function renderDiagnostics() {
     later.append(element('summary', '', `${newEntries.length} newer transcript ${newEntries.length === 1 ? 'line' : 'lines'} not in this check`), element('p', '', newEntries.map(entry => `${entry.speaker}: ${entry.text.trim()}`).join('\n')));
     inputSection.append(later);
   }
-  if (!sent && run) inputSection.append(element('p', 'trace-note', run.source === 'resumed' ? 'Not recorded here. This task started before the current session.' : run.source === 'manual' ? 'Typed requests go directly to Replicas without a Jev check.' : 'Collecting the request. Jev has not checked this text yet.'));
+  if (!sent && run) inputSection.append(element('p', 'trace-note', run.source === 'resumed' ? 'Not recorded here. This task started before the current session.' : run.source === 'manual' ? 'Typed requests go directly to the selected assistant without a Jev check.' : 'Collecting the request. Jev has not checked this text yet.'));
   if (read) inputSection.append(element('p', 'trace-note', read.reason));
 
   if (run) {
@@ -332,7 +335,7 @@ function renderDiagnostics() {
       action.append(element('strong', 'trace-action', decision.action === 'none' ? 'No request' : decision.action), element('small', '', decision.turn === 'collecting' ? 'Still collecting' : decision.turn === 'not_request' ? 'Not a request' : decision.destination === 'none' ? 'No assistant selected' : `→ ${decision.destination === 'replicas' ? 'Replicas' : decision.destination}`)); scores.append(action);
       scoreSection.append(scores);
     } else scoreSection.append(element('p', 'trace-note', modelError?.message || (sent ? 'Waiting for Jev’s response.' : 'No score until Jev checks this request.')));
-    const outcome = replicaId ? (task?.answer ? 'Answer received' : 'Sent to Replicas') : handoff ? 'Sending · awaiting confirmation' : run.source === 'test' ? 'Test only · not sent to Replicas' : 'Not sent to Replicas';
+    const outcome = replicaId ? (task?.answer ? 'Answer received' : `Sent to ${provider}`) : handoff ? 'Sending · awaiting confirmation' : run.source === 'test' ? 'Test only · not sent' : `Not sent to ${provider}`;
     const result = element('div', `diagnostic-outcome${replicaId ? ' sent' : ''}`);
     result.append(element('strong', '', outcome));
     const explanation = replicaId ? (confirmed ? `${elapsed(confirmed.at - run.startedAt)} from receipt to handoff` : 'Workspace confirmed') : gate?.message || 'Waiting for a complete request.';
@@ -409,7 +412,8 @@ function render(next) {
   renderRequests();
   $('setup-banner').classList.toggle('hidden', state.ready || tab === 'history');
   $('setup-dot').classList.toggle('hidden', state.ready);
-  $('sidebar-environment').textContent = state.settings.environmentName || 'Choose a workspace';
+  $('sidebar-environment').textContent = state.settings.environmentName || state.settings.t3ProjectName || 'Choose a workspace';
+  $('sidebar-environment-kind').textContent = state.settings.environmentName ? 'Replicas environment' : state.settings.t3ProjectName ? 'Local T3 project' : 'Agent workspace';
   document.querySelector('.environment-avatar').textContent = (state.settings.environmentName || 'S').slice(0, 1).toUpperCase();
   $('gateway-status').textContent = state.credentials.gateway ? 'Key saved' : 'Not connected';
   $('gateway-status').classList.toggle('connected', state.credentials.gateway);
@@ -419,6 +423,10 @@ function render(next) {
     $('environment').append(new Option(state.settings.environmentName || 'Selected environment', state.settings.environmentId));
     $('environment').value = state.settings.environmentId;
   }
+  $('t3-status').textContent = state.credentials.t3 ? 'Connected' : 'Not connected';
+  $('t3-status').classList.toggle('connected', !!state.credentials.t3);
+  if (state.settings.t3ProjectId && ![...$('t3-project').options].some(o => o.value === state.settings.t3ProjectId)) $('t3-project').append(new Option(state.settings.t3ProjectName || 'Selected project', state.settings.t3ProjectId));
+  $('t3-project').value = state.settings.t3ProjectId || '';
   $('wispr-status').textContent = state.watcher.message;
   if (!preferencesLoaded) loadPreferences();
   renderTasks();
@@ -490,9 +498,23 @@ document.addEventListener('keydown', event => {
   }
   if (event.key.toLowerCase() === 'n' && !event.metaKey && !event.ctrlKey && !event.altKey && !selectedTaskId && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) { event.preventDefault(); $('ask-toggle').click(); }
 });
-$('ask-form').onsubmit = event => { event.preventDefault(); busy(event.submitter, async () => { await call(api.ask($('question').value)); $('question').value = ''; $('ask-form').classList.add('hidden'); }); };
+$('ask-form').onsubmit = event => { event.preventDefault(); busy(event.submitter, async () => { await call(api.ask($('question').value, $('ask-destination').value)); $('question').value = ''; $('ask-form').classList.add('hidden'); }); };
 $('gateway-form').onsubmit = event => { event.preventDefault(); busy(event.submitter, async () => { const key = $('gateway-key').value.trim(); if (!key) throw new Error('Paste a Gateway key first.'); await save({ gatewayKey: key }); $('gateway-key').value = ''; toast('Gateway key saved securely. Test the Jev connection next.'); }); };
 $('replicas-form').onsubmit = event => { event.preventDefault(); busy(event.submitter, async () => { const key = $('replicas-key').value.trim(); if (!key) throw new Error('Paste a Replicas key first.'); await save({ replicasKey: key }); $('replicas-key').value = ''; await environments(); toast('Replicas connected. Choose your agent environment.'); }); };
+$('t3-connect').onclick = () => busy($('t3-connect'), async () => {
+  t3Projects = await call(api.connectT3());
+  $('t3-project').replaceChildren(new Option('Choose a local project…', ''));
+  for (const project of t3Projects) $('t3-project').append(new Option(`${project.title} · ${project.workspaceRoot}`, project.id));
+  render(await call(api.state()));
+  toast('T3 Code connected. Choose the project for local requests.');
+});
+$('t3-project').onchange = () => {
+  const project = t3Projects.find(p => p.id === $('t3-project').value);
+  save({ t3ProjectId: project?.id || '', t3ProjectName: project?.title || '' }).then(() => {
+    $('t3-model').textContent = project ? `${project.model || 'Set a default model in T3 Code'}. Approvals and follow-up questions appear in T3 Code.` : 'Choose a project for local requests.';
+  }).catch(e => toast(e.message, true));
+};
+$('t3-disconnect').onclick = () => busy($('t3-disconnect'), async () => { render(await call(api.disconnectT3())); $('t3-project').replaceChildren(new Option('Connect T3 Code to choose', '')); });
 $('gateway-check').onclick = () => busy($('gateway-check'), async () => { await call(api.checkGateway()); toast('Jev responded successfully through AI Gateway.'); });
 $('gateway-disconnect').onclick = () => busy($('gateway-disconnect'), () => save({ gatewayKey: '' }));
 $('replicas-disconnect').onclick = () => busy($('replicas-disconnect'), () => save({ replicasKey: '', environmentId: '', environmentName: '' }));

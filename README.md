@@ -1,6 +1,6 @@
 # Sidekick
 
-A personal macOS menu-bar companion for Zoom calls. It watches Wispr Flow's meeting transcripts and completed hotkey dictation, uses Jev through Vercel AI Gateway to recognize research and implementation requests, launches a Replicas agent, and notifies you with a written answer. Optional **Read to me** playback uses your Mac’s current audio output.
+A personal macOS menu-bar companion for Zoom calls. It watches Wispr Flow's meeting transcripts and completed hotkey dictation, uses Jev through Vercel AI Gateway to recognize research and implementation requests, launches a Replicas cloud agent or a local T3 Code agent, and notifies you with a written answer. Optional **Read to me** playback uses your Mac’s current audio output.
 
 ## Use the app
 
@@ -17,7 +17,17 @@ You can also click **New research** (or press **N**) to type a question to test 
 
 **Command–Shift–period** immediately stops playback. Pausing listening stops new requests; already-running cloud research continues. Use **Cancel task** to interrupt it. Closing the window leaves Sidekick running in the menu bar.
 
-Sidekick executes **Replicas** research and implementation tasks. A request addressed to T3 is retained as “Needs attention”; it is never silently sent to Replicas. T3 integration is not implemented.
+Sidekick routes **“Replicas” / “Sidekick”** to cloud agents and **“T3” / “T three” / “Tee three”** to local T3 Code agents. It never sends a T3 request to Replicas.
+
+### Local T3 Code (0.6.0)
+
+In **Settings → Connections → T3 Code**, choose **Connect / refresh projects**, then select a **Default local project**. T3 Code must be installed in `/Applications` or `~/Applications`, with its standard `~/.t3` data directory. Sidekick opens the app in the background if necessary and pairs locally; no API key needs to be pasted. AI Gateway is still required for speech-request classification and answer summaries, but Replicas credentials are not required for local tasks.
+
+Say **“T3, research…”** or **“T3, implement…”**. Each request creates a new thread in that project's existing local folder. It uses the project's default model, falling back to the model and model options from its most recently updated thread. Set a project default in T3 for a fixed choice. This first version does not choose projects from speech or automatically create isolated worktrees. **New research → Run in → T3 Code** also provides a typed test.
+
+Research uses T3 plan mode; implementation uses its default interaction mode. Both use T3's approval-required runtime. Sidekick surfaces approvals and questions as **Needs attention**; answer them in T3 Code, then choose **Refresh** in Sidekick. **Open T3 Code** brings the app forward; find the thread by its task title. T3's current desktop URL handler does not support opening a specific thread. Completed answers return to Sidekick for review and optional speech. **Cancel task** interrupts the local turn and waits for confirmation. A lost launch response is recovered by the saved thread ID rather than launching again.
+
+The connection is scoped to orchestration read/operate and encrypted with the other credentials. Requests use only the discovered loopback server and verify its environment ID. The integration uses T3 Code's internal HTTP API and bundled pairing CLI, verified against **0.0.45**; future T3 updates may require adapter changes. Local means agent tools and files run on this Mac; model requests still use T3's configured provider.
 
 ## Interface (0.5.0)
 
@@ -25,7 +35,7 @@ Sidekick executes **Replicas** research and implementation tasks. A request addr
 
 ## Where it runs and what it stores
 
-The menu-bar app, file watcher, job tracking, and audio playback run on your Mac. Jev, response summaries, and speech generation use AI Gateway; the research agent runs in Replicas. No Sidekick web server or hosted backend is required.
+The menu-bar app, file watcher, job tracking, and audio playback run on your Mac. Jev, response summaries, and speech generation use AI Gateway; the agent runs in Replicas or local T3 Code, depending on the named destination. No Sidekick web server or hosted backend is required.
 
 App data is in `~/Library/Application Support/Sidekick`. Credentials are encrypted using Electron safeStorage with a macOS Keychain-protected key. They are never sent to the renderer. The SQLite database stores original requests, selected context, task modes, results, processed request IDs, and settings. The recent transcript buffer is in memory; only a task's selected context is persisted. **Archive** moves finished tasks out of Inbox into History without deleting local answers or remote Replicas threads. **Move to Inbox** restores them. Running tasks cannot be archived.
 
@@ -110,6 +120,7 @@ The automated tests cover real transcript file changes, deduplication, stale/clo
 
 - `src/transcript.ts`: read-only Wispr watcher and normalized utterances.
 - `src/services.ts`: AI SDK calls, Replicas API, final-answer parsing.
+- `src/t3.ts`: local T3 discovery, scoped pairing, thread creation, progress, and cancellation.
 - `src/engine.ts`: request and research lifecycle, completion handling, speech queue.
 - `src/main.ts`: Electron lifecycle, secure IPC, credentials, notifications, native helper.
 - `renderer/`: menu-bar companion UI and audio playback.

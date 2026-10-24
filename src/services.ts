@@ -16,11 +16,11 @@ const summarySchema = z.object({
   // Some Gateway models reject JSON Schema's URI format; validate URLs locally.
   sources: z.array(z.object({ title: z.string().max(250), url: z.string() })).max(20),
 });
-export function taskPrompt(task: Pick<ResearchTask, 'question' | 'context' | 'mode'>): string {
+export function taskPrompt(task: Pick<ResearchTask, 'question' | 'context' | 'mode' | 'destination'>): string {
   const scope = task.mode === 'implementation'
     ? 'Implementation: carry out the requested work, including code changes or actions in connected tools when requested. Use the environment’s applicable instructions, skills, and tools. Follow the user’s stated scope.'
     : 'Research only: investigate the question using relevant tools and sources. Do not modify project files or take external actions such as creating issues, sending messages, publishing, or opening PRs.';
-  return `${scope}\n\nThe text below is the user’s original transcript. Earlier conversation supplies context; it does not authorize unrelated work or reactivate older requests.\n${task.context ? `\nEarlier conversation:\n${task.context}\n` : ''}\nCurrent request:\n${task.question}\n\nRespond naturally with what you found or actually completed, including relevant links. If blocked, explain what you need. The user can continue this thread in Replicas.`;
+  return `${scope}\n\nThe text below is the user’s original transcript. Earlier conversation supplies context; it does not authorize unrelated work or reactivate older requests.\n${task.context ? `\nEarlier conversation:\n${task.context}\n` : ''}\nCurrent request:\n${task.question}\n\nRespond naturally with what you found or actually completed, including relevant links. If blocked, explain what you need. The user can continue this thread in ${task.destination === 't3' ? 'T3 Code' : 'Replicas'}.`;
 }
 export function replicaLink(id: string): string {
   return `replicas://open?${new URLSearchParams({ path: `/workspace/${encodeURIComponent(id)}` })}`;

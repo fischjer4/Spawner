@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AppState, Entry, Meeting, ResearchTask, Settings, DiagnosticRun, DiagnosticEvent, Decision, PendingRequest } from './types.js';
+import { T3Error, type T3 } from './t3.js';
 import { Store } from './store.js';
 import { conversation, hasWakeName, TranscriptWatcher } from './transcript.js';
 import { ApiError, extractAnswer, Models, Replicas, taskPrompt, decisionRequest } from './services.js';
@@ -57,10 +58,11 @@ export class Engine {
   constructor(
     public settings: Settings,
     private store: Store,
-    private credentials: () => { gateway: boolean; replicas: boolean },
+    private credentials: () => AppState['credentials'],
     public models: Pick<Models, 'decide' | 'speech' | 'summarize'>,
     public replicas: Pick<Replicas, 'create' | 'wait' | 'history' | 'interrupt' | 'findByName' | 'rename'>,
     private readonly requestTiming = LIVE_REQUEST_TIMING,
+    public t3?: Pick<T3, 'prepare' | 'create' | 'progress' | 'interrupt'>,
   ) {
     this.tasks = store.tasks();
     for (const task of this.tasks) {
@@ -121,7 +123,7 @@ export class Engine {
     finally { this.testing = false; this.onChange(); }
   }
   private newWatcher(): TranscriptWatcher { return new TranscriptWatcher(this.settings.wisprDirectory, (m, e) => this.receive(m, e), () => this.onChange()); }
-  get ready(): boolean { const c = this.credentials(); return c.gateway && c.replicas && !!this.settings.environmentId; }
+  get ready(): boolean { const c = this.credentials(); return c.gateway && ((c.replicas && !!this.settings.environmentId) || (!!c.t3 && !!this.settings.t3ProjectId)); }
   snapshot(): AppState {
     const meeting = this.watcher.meeting;
     return { requests: this.pendingRequests(), settings: this.settings, credentials: this.credentials(), meeting: meeting ? { id: meeting.id, title: meeting.title, lastSpeechAt: meeting.lastSpeechAt } : null, tasks: this.tasks.map(t => ({ ...t, context: '' })), watcher: this.watcher.status, activity: this.activity, detection: this.detection, diagnostics: { runs: this.diagnosticRuns, watcher: this.watcher.diagnostics }, playing: this.playing, ready: this.ready };
@@ -185,7 +187,7 @@ export class Engine {
     this.candidateTimer = setTimeout(() => void this.evaluateCandidate(), Math.max(1, remaining));
   }
   receive(meeting: Meeting, entries: Entry[]): void {
-    const blocked = !this.settings.enabled ? 'Listening is paused.' : !this.ready ? 'Setup is incomplete: check Gateway, Replicas, and the selected environment.' : null;
+    const blocked = !this.settings.enabled ? 'Listening is paused.' : !this.ready ? 'Setup is incomplete: connect Gateway and choose a Replicas environment or local T3 project.' : null;
     const fresh = entries.filter(e => !this.speechIntervals.some(i => e.epoch >= i.start - 1000 && e.epoch <= i.end + 2000) && !(this.playing && e.epoch >= this.lastSpeakingStarted - 1000));
     if (blocked || !fresh.length) {
       const run = this.beginRun(meeting.source === 'dictation' ? 'dictation' : 'live', conversation(entries));
@@ -322,20 +324,17 @@ export class Engine {
       this.record(candidate.run, 'Gate', 'Detection gates passed.', 'ok', decision);
       this.detection = { request, message: decision.action === 'cancel' ? 'Cancellation request recognized.' : `${decision.action === 'implementation' ? 'Implementation' : 'Research'} request recognized.`, at: Date.now() };
       if (decision.action === 'cancel') {
-        this.record(candidate.run, 'Replicas', 'Cancellation requested; no new research will be launched.');
-        const running = this.tasks.filter(t => t.meetingId === candidate.meeting.id && ['starting', 'researching'].includes(t.status));
+        this.record(candidate.run, decision.destination === 't3' ? 'T3' : 'Replicas', 'Cancellation requested; no new research will be launched.');
+        const running = this.tasks.filter(t => t.meetingId === candidate.meeting.id && (t.destination ?? 'replicas') === decision.destination && ['starting', 'researching', 'needs_attention'].includes(t.status));
         if (running.length === 1) { await this.cancel(running[0].id); this.activity = 'Cancellation requested. Check the task for its status.'; }
         else this.activity = 'Choose which task to cancel in Sidekick.';
-        this.record(candidate.run, 'Replicas', this.activity, running.length === 1 ? 'ok' : 'blocked');
+        this.record(candidate.run, decision.destination === 't3' ? 'T3' : 'Replicas', this.activity, running.length === 1 ? 'ok' : 'blocked');
         this.detection = { request, message: this.activity, at: Date.now() };
         return;
       }
-      const task: ResearchTask = { id: randomUUID(), meetingId: candidate.meeting.id, title: requestTitle(candidate.entries.map(entry => entry.text).join(' ')), mode: decision.action, question: request, context, createdAt: Date.now(), status: 'starting' };
+      const task: ResearchTask = { destination: decision.destination, id: randomUUID(), meetingId: candidate.meeting.id, title: requestTitle(candidate.entries.map(entry => entry.text).join(' ')), mode: decision.action, question: request, context, createdAt: Date.now(), status: 'starting' };
       candidate.run.taskId = task.id;
       this.tasks.unshift(task); this.save(task);
-      if (decision.destination === 't3') {
-        task.status = 'needs_attention'; task.title = 'T3 connection needed'; this.record(candidate.run, 'Replicas', 'Not sent: request addressed to T3, which is not connected.', 'blocked'); task.error = 'This version runs research in Replicas. Your T3 request was saved here and was not sent to another service.'; this.save(task); return;
-      }
       if (this.tasks.filter(t => ['starting', 'researching'].includes(t.status)).length > 3) {
         task.status = 'needs_attention'; this.record(candidate.run, 'Replicas', 'Not sent: three tasks already running.', 'blocked'); task.error = 'Three tasks are already running. Start this one after a task finishes.'; this.save(task); return;
       }
@@ -355,6 +354,10 @@ export class Engine {
     }
   }
   async launch(task: ResearchTask): Promise<void> {
+    if (task.destination === 't3') return this.launchT3(task);
+    if (!this.credentials().replicas || !this.settings.environmentId) {
+      task.status = 'needs_attention'; task.error = 'Connect Replicas and choose an environment in Settings.'; this.save(task); return;
+    }
     task.workspaceName = `sidekick-${task.id}`;
     this.save(task);
     const run = this.diagnosticRuns.find(r => r.taskId === task.id) ?? this.beginRun('manual', task.question);
@@ -380,6 +383,66 @@ export class Engine {
     this.save(task);
     if (task.replicaId) await this.nameWorkspace(task, run);
   }
+  private async launchT3(task: ResearchTask): Promise<void> {
+    const run = this.diagnosticRuns.find(r => r.taskId === task.id) ?? this.beginRun('manual', task.question);
+    run.taskId = task.id;
+    try {
+      if (!this.t3 || !this.credentials().t3 || !this.settings.t3ProjectId) throw new T3Error('Connect T3 Code and choose a local project in Settings.');
+      const { project, environmentId } = await this.t3.prepare(this.settings.t3ProjectId);
+      if (task.status === 'cancelled') return;
+      task.t3ThreadId = task.id; task.t3EnvironmentId = environmentId; task.t3ProjectId = project.id;
+      this.save(task);
+      this.record(run, 'T3', 'Sending the original transcript to local T3 Code', 'pending', { threadId: task.t3ThreadId, project: project.title, model: project.modelSelection, message: taskPrompt(task) });
+      await this.t3.create(task, project);
+      this.record(run, 'T3', 'T3 Code accepted the local thread', 'ok', { threadId: task.t3ThreadId });
+      if (task.cancelRequested) { await this.cancelT3(task); this.save(task); return; }
+      task.status = 'researching'; task.error = undefined;
+      this.activity = `Local task started: ${task.title}`;
+      this.onNotify('Local T3 task started', task.title, task.id);
+    } catch (error) {
+      task.status = 'needs_attention';
+      task.error = task.t3ThreadId ? 'T3 launch was not confirmed. Refresh checks the existing thread; Sidekick will not launch a duplicate.' : friendlyError(error);
+      this.record(run, 'T3', task.error, 'error', { error: friendlyError(error) });
+    }
+    this.save(task);
+  }
+  private async refreshT3(task: ResearchTask): Promise<void> {
+    if (!this.t3 || !task.t3ThreadId) return;
+    if (task.cancelRequested) { await this.cancelT3(task); this.save(task); return; }
+    const run = this.diagnosticRuns.find(r => r.taskId === task.id) ?? this.beginRun('resumed', task.question);
+    run.taskId = task.id;
+    const progress = await this.t3.progress(task);
+    if (!this.tasks.includes(task) || task.status === 'cancelled' || task.cancelRequested) return;
+    this.record(run, 'Research', `T3 Code: ${progress.status}`, progress.error ? 'blocked' : 'ok');
+    if (progress.status !== 'ready' || !progress.answer) {
+      const changed = task.status !== progress.status;
+      task.status = progress.status; task.error = progress.error;
+      if (changed && progress.status === 'needs_attention') this.onNotify('T3 needs your input', task.title, task.id);
+      this.save(task); return;
+    }
+    const newAnswer = task.answer !== progress.answer;
+    const alreadySummarized = !newAnswer && !!task.spokenAnswer;
+    if (newAnswer) { task.archivedAt = undefined; task.spokenAnswer = undefined; task.sources = undefined; }
+    task.answer = progress.answer; task.error = undefined;
+    this.save(task);
+    if (!alreadySummarized) await this.prepareSummary(task, run);
+    else task.status = 'ready';
+    if (!this.tasks.includes(task) || (task.status as string) === 'cancelled' || task.cancelRequested) return;
+    if (newAnswer) this.onNotify(task.status === 'needs_attention' ? 'T3 needs your input' : 'Your local task update is ready', task.title, task.id);
+    this.activity = `Local response ready: ${task.title}`;
+    this.save(task);
+  }
+  private async cancelT3(task: ResearchTask): Promise<void> {
+    try {
+      if (!this.t3) throw new Error('T3 is not connected.');
+      const stopped = await this.t3.interrupt(task);
+      task.cancelRequested = !stopped;
+      task.status = stopped ? 'cancelled' : 'researching';
+      task.error = stopped ? undefined : 'Waiting for T3 Code to confirm cancellation…';
+    } catch {
+      task.status = 'needs_attention'; task.error = 'Could not confirm cancellation. Open T3 Code to stop the agent, or Refresh to retry.';
+    }
+  }
   private async nameWorkspace(task: ResearchTask, run: DiagnosticRun): Promise<void> {
     if (!task.replicaId || task.workspaceName !== `sidekick-${task.id}`) return;
     // Keep the unique recovery name until the remote ID is saved.
@@ -394,10 +457,10 @@ export class Engine {
       this.record(run, 'Replicas', 'Agent launched; naming failed. Refresh will retry naming.', 'error', { error: friendlyError(error) });
     }
   }
-  async startManual(question: string): Promise<string> {
-    if (!this.ready) throw new Error('Connect AI Gateway and Replicas, then choose an environment in Settings.');
+  async startManual(question: string, destination: 'replicas' | 't3' = 'replicas'): Promise<string> {
+    if (!this.credentials().gateway) throw new Error('Connect AI Gateway in Settings first.');
     if (this.tasks.filter(t => ['starting', 'researching'].includes(t.status)).length >= 3) throw new Error('Three tasks are already running.');
-    const task: ResearchTask = { id: randomUUID(), meetingId: this.watcher.meeting?.id ?? 'manual', title: requestTitle(question), mode: 'research', question, context: this.watcher.meeting ? conversation(this.watcher.meeting.entries) : '', status: 'starting', createdAt: Date.now() };
+    const task: ResearchTask = { destination, id: randomUUID(), meetingId: this.watcher.meeting?.id ?? 'manual', title: requestTitle(question), mode: 'research', question, context: this.watcher.meeting ? conversation(this.watcher.meeting.entries) : '', status: 'starting', createdAt: Date.now() };
     this.tasks.unshift(task); this.save(task);
     await this.launch(task);
     return task.id;
@@ -422,6 +485,7 @@ export class Engine {
     const task = this.task(id);
     this.refreshing.add(id);
     try {
+      if (task.destination === 't3') { await this.refreshT3(task); return; }
       if (!task.replicaId && task.workspaceName) {
         task.replicaId = await this.replicas.findByName(task.workspaceName) ?? undefined;
         if (!task.replicaId) { task.error = 'No matching workspace was found among recent API tasks. Check Replicas before starting a new task.'; this.save(task); return; }
@@ -480,7 +544,7 @@ export class Engine {
       if (signal?.aborted || !this.tasks.includes(task) || task.status === 'cancelled') return;
       task.spokenAnswer = summary.spokenAnswer; task.sources = summary.sources;
       task.status = summary.status === 'needs_input' ? 'needs_attention' : 'ready';
-      task.error = summary.status === 'needs_input' ? 'The agent needs your input. Continue in Replicas.' : undefined;
+      task.error = summary.status === 'needs_input' ? `The agent needs your input. Continue in ${task.destination === 't3' ? 'T3 Code' : 'Replicas'}.` : undefined;
       this.record(run, 'Summary', 'Summary returned', 'ok', undefined, Date.now() - started);
     } catch (error) {
       if (signal?.aborted || !this.tasks.includes(task) || task.status === 'cancelled') return;
@@ -533,6 +597,11 @@ export class Engine {
     if (this.playing === id) this.stopSpeech();
     const previous = task.status;
     task.status = 'cancelled'; this.save(task);
+    if (task.destination === 't3') {
+      task.cancelRequested = true;
+      if (task.t3ThreadId) await this.cancelT3(task);
+      this.save(task); return;
+    }
     if (!task.replicaId) return;
     try {
       const state = await this.replicas.wait(task.replicaId);
@@ -556,7 +625,7 @@ export class Engine {
   dispose(): void { this.generation++; this.candidate = undefined; this.queuedCandidates = []; clearTimeout(this.candidateTimer); this.decisionAbort?.abort(); this.stopSpeech(); }
 }
 export function friendlyError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
+  if (error instanceof ApiError || error instanceof T3Error) return error.message;
   if (error instanceof Error) {
     if (/invalid schema|response_format/i.test(error.message)) return 'The selected model rejected the summary format. The full answer is still available.';
     if (error.name === 'AbortError' || error.name === 'TimeoutError') return 'The request timed out. Try again when the connection is available.';
@@ -569,5 +638,5 @@ export function friendlyError(error: unknown): string {
 }
 
 function requestTitle(request: string): string {
-  return request.replace(/^(?:You|Speaker|Other speaker \d*):\s*/, '').replace(/^(?:Hey[, ]+)?(?:Replicas?|Sidekick|T\s*3)[,:.!]?\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Replicas task';
+  return request.replace(/^(?:You|Speaker|Other speaker \d*):\s*/, '').replace(/^(?:Hey[, ]+)?(?:Replicas?|Sidekick|T\s*3|T(?:ee)? three)[,:.!]?\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Replicas task';
 }

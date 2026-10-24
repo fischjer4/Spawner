@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="titlebar"><span>Sidekick</span><span class="titlebar-hint">0.5.1</span></div>
+<div class="titlebar"><span>Sidekick</span><span class="titlebar-hint">0.6.0</span></div>
 <div class="app">
   <aside>
     <div class="brand"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor"/><path d="M7 11v3m5-7v10m5-8v6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg><span>Sidekick</span></div>
@@ -20,7 +20,7 @@
     <div class="aside-bottom">
       <button class="nav-item" data-tab="diagnostics"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10h4l2-6 4 12 2-6h4"/></svg> Diagnostics</button>
       <button class="nav-item" data-tab="settings"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14M7 3v4M13 8v4M8 13v4"/></svg> Settings <span id="setup-dot" class="setup-dot"></span></button>
-      <div class="environment-mark"><span class="environment-avatar">S</span><div><strong id="sidebar-environment">Your workspace</strong><small>Replicas environment</small></div></div>
+      <div class="environment-mark"><span class="environment-avatar">S</span><div><strong id="sidebar-environment">Your workspace</strong><small id="sidebar-environment-kind">Replicas environment</small></div></div>
     </div>
   </aside>
   <main>
@@ -29,11 +29,11 @@
     <section id="request-capture" class="request-capture hidden" aria-label="Current voice requests"></section>
     <section id="activity" class="page active" aria-label="Inbox">
       <div class="page-heading"><div><h1 id="inbox-heading">Inbox</h1><p id="inbox-description" class="intro">Your agents, without the noise.</p></div><button id="archive-completed" class="secondary compact">Archive finished</button></div>
-      <div id="setup-banner" class="setup-banner"><div><strong>Connect your tools to get started.</strong><p>Add your keys and choose an agent environment.</p></div><button class="primary compact" data-go="connections">Connect tools</button></div>
-      <form id="ask-form" class="ask-form hidden"><div class="form-title"><strong>New research</strong><button id="ask-close" type="button" class="icon-button" aria-label="Close new research">×</button></div><label for="question">What should Replicas investigate?</label><textarea id="question" rows="3" maxlength="6000" placeholder="Ask a question or describe what to explore…" required></textarea><div class="form-bottom"><small>For implementation, dictate “Replicas, build…” in Wispr.</small><button class="primary compact" type="submit">Start research <span>↗</span></button></div></form>
+      <div id="setup-banner" class="setup-banner"><div><strong>Connect your tools to get started.</strong><p>Connect AI Gateway, then choose a cloud environment or a local T3 project.</p></div><button class="primary compact" data-go="connections">Connect tools</button></div>
+      <form id="ask-form" class="ask-form hidden"><div class="form-title"><strong>New research</strong><button id="ask-close" type="button" class="icon-button" aria-label="Close new research">×</button></div><label for="question">What should your agent investigate?</label><textarea id="question" rows="3" maxlength="6000" placeholder="Ask a question or describe what to explore…" required></textarea><label for="ask-destination">Run in</label><select id="ask-destination"><option value="replicas">Replicas · cloud</option><option value="t3">T3 Code · this Mac</option></select><div class="form-bottom"><small>For implementation, dictate “Replicas, build…” or “T3, build…” in Wispr.</small><button class="primary compact" type="submit">Start research <span>↗</span></button></div></form>
       <div id="detection" class="detection hidden" role="status"><span class="detection-dot"></span><div><strong id="detection-message"></strong><p id="detection-request"></p></div></div>
       <div id="tasks"></div>
-      <div id="empty" class="empty-state"><div class="empty-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 14l3-7h14l3 7v11H6zM6 16h6l2 3h4l2-3h6"/></svg></div><h2 id="empty-title">Nothing needs your attention.</h2><p id="empty-description">Ask Replicas to research or build something.<br>We’ll let you know when it’s ready.</p><div id="voice-examples" class="voice-examples"><span>Try saying</span><p>“Replicas, go research this.”</p><p>“Replicas, build a notification bell.”</p></div></div>
+      <div id="empty" class="empty-state"><div class="empty-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 14l3-7h14l3 7v11H6zM6 16h6l2 3h4l2-3h6"/></svg></div><h2 id="empty-title">Nothing needs your attention.</h2><p id="empty-description">Ask Replicas or T3 to research or build something.<br>We’ll let you know when it’s ready.</p><div id="voice-examples" class="voice-examples"><span>Try saying</span><p>“Replicas, go research this.”</p><p>“T3, research this local project.”</p></div></div>
       <div id="inbox-footer" class="activity-footer"><span class="tiny-dot"></span><span id="activity-message">Listening for new requests through Wispr.</span><button class="text-button" data-go="diagnostics">View diagnostics <span>↗</span></button></div>
     </section>
     <section id="diagnostics" class="page" aria-label="Diagnostics">
@@ -67,8 +67,13 @@
         <div class="environment-row"><label for="environment">Agent environment</label><div class="input-row"><select id="environment"><option value="">Connect Replicas to choose</option></select><button id="load-environments" class="secondary compact">Refresh</button></div></div>
         <div class="card-actions"><button class="text-button" data-open="replicas">Open Replicas ↗</button><span class="helper-text">Personal → API Keys</span><button id="replicas-disconnect" class="text-button muted">Disconnect</button></div>
       </div>
+      <div class="connection-card"><div class="card-heading"><div><h2>T3 Code · local</h2><p>Say “T3, …” to start an agent in a project on this Mac.</p></div><span id="t3-status" class="badge">Not connected</span></div>
+        <div class="card-actions"><button id="t3-connect" class="secondary compact">Connect / refresh projects</button><button class="text-button" data-open="t3">Open T3 Code ↗</button><button id="t3-disconnect" class="text-button muted">Disconnect</button></div>
+        <div class="environment-row"><label for="t3-project">Default local project</label><select id="t3-project"><option value="">Connect T3 Code to choose</option></select></div>
+        <p id="t3-model" class="helper-text">Uses the project’s default model, or its most recently used model. Approvals and follow-up questions appear in T3 Code.</p>
+      </div>
       <div class="note"><strong>Answers arrive quietly.</strong><p>Sidekick notifies you when an agent’s response is ready. Read the answer here, or choose <strong>Read to me</strong> to play a short summary through your Mac’s current audio output. Use headphones during calls.</p></div>
-      <p class="privacy-note">Keys are encrypted with a key protected by macOS Keychain. Recent conversation is sent to AI Gateway when a request is detected; your original request and relevant context go to Replicas. Your raw audio stays with Wispr.</p>
+      <p class="privacy-note">Keys are encrypted with a key protected by macOS Keychain. Recent conversation is sent to AI Gateway when a request is detected; your original request and relevant context go to the assistant you name. T3 agents run on this Mac using their configured model provider. Your raw audio stays with Wispr.</p>
     </section>
     <section id="preferences" class="page" aria-label="Preferences">
       <h1>Preferences</h1><p class="intro">Sidekick stays in the menu bar when you close this window.</p>
@@ -76,7 +81,7 @@
       <div class="connection-card"><h2>Wispr Flow</h2><label for="wispr-path">Local data folder</label><div class="input-row"><input id="wispr-path" readonly><button id="choose-wispr" class="secondary compact">Choose…</button></div><p id="wispr-status" class="helper-text"></p><p class="helper-text">Turn on Live Transcript in Wispr before recording. Its local transcript saves after a short pause, so requests may take a few seconds to arrive.</p></div>
       <div class="connection-card"><h2>Notifications</h2><p>When a task finishes, a quiet macOS notification lets you review the answer or choose <strong>Read to me</strong>. Speech starts only when you click.</p><div class="card-actions"><button id="test-notification" class="secondary compact">Send test notification</button><button class="text-button" data-open="notification-settings">macOS notification settings ↗</button></div><p class="helper-text">Allow Sidekick notifications and choose Banners or Alerts. macOS may tuck the buttons under Options. Focus and screen-sharing settings can hide banners during calls.</p></div>
       <form id="models-form" class="connection-card"><h2>Models & voice</h2><p class="helper-text">These models use your AI Gateway account.</p><label for="decision-model">Jev decision model</label><input id="decision-model" required><label for="text-model">Response summary model</label><input id="text-model" required><label for="speech-model">Speech model</label><input id="speech-model" required><label for="voice">Voice</label><input id="voice" required><div class="card-actions"><button class="primary compact" type="submit">Save preferences</button></div></form>
-      <div class="note"><strong>Always within reach.</strong><p>Press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>.</kbd> to stop speaking immediately. Pausing listening doesn’t cancel research already running.</p><p>Requests addressed to T3 are saved for your attention. They aren’t sent to Replicas.</p><button class="text-button" data-open="data">Open local app data ↗</button></div>
+      <div class="note"><strong>Always within reach.</strong><p>Press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>.</kbd> to stop speaking immediately. Pausing listening doesn’t cancel research already running.</p><p>Say “Replicas” for cloud work or “T3” for your default local project. Choose that project in Connections.</p><button class="text-button" data-open="data">Open local app data ↗</button></div>
     </section>
   </main>
 </div>

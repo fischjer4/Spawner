@@ -26,6 +26,9 @@ export interface Meeting {
   entries: Entry[];
 }
 export type TaskStatus = 'starting' | 'researching' | 'ready' | 'speaking' | 'delivered' | 'needs_attention' | 'failed' | 'cancelled';
+export type AgentProgress =
+  | { status: 'ready'; answer: string; error?: undefined }
+  | { status: 'researching' | 'needs_attention' | 'failed' | 'cancelled'; answer?: string; error?: string };
 export type TaskMode = 'research' | 'implementation';
 export interface ResearchTask {
   destination?: 'replicas' | 't3';
@@ -44,6 +47,7 @@ export interface ResearchTask {
   chatId?: string;
   workspaceName?: string;
   answer?: string;
+  summaryStatus?: 'answer' | 'needs_input';
   spokenAnswer?: string;
   sources?: { title: string; url: string }[];
   error?: string;
@@ -59,6 +63,7 @@ export interface DiagnosticEvent {
   durationMs?: number;
   data?: unknown;
 }
+export type RecordEvent = (stage: string, message: string, status: DiagnosticEvent['status'], data?: unknown, durationMs?: number) => void;
 export interface DiagnosticRun {
   id: string;
   source: 'live' | 'dictation' | 'test' | 'manual' | 'resumed';

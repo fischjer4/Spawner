@@ -6,11 +6,12 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { ResearchTask } from './types.js';
+import type { AgentProgress, ResearchTask } from './types.js';
+import { UserFacingError } from './errors.js';
 import { taskPrompt } from './services.js';
 
 const execute = promisify(execFile);
-export class T3Error extends Error {}
+export class T3Error extends UserFacingError {}
 export const t3ConnectionSchema = z.object({ token: z.string(), expiresAt: z.number(), environmentId: z.string() });
 export type T3Connection = z.infer<typeof t3ConnectionSchema>;
 const modelSchema = z.object({ instanceId: z.string(), model: z.string() }).passthrough();
@@ -24,7 +25,6 @@ const threadSchema = z.object({
 });
 const shellSchema = z.object({ projects: z.array(projectSchema), threads: z.array(threadSchema) });
 export type T3Project = z.infer<typeof projectSchema> & { modelSelection: z.infer<typeof modelSchema> | null };
-export type T3Progress = { status: 'researching' | 'ready' | 'needs_attention' | 'failed' | 'cancelled'; answer?: string; error?: string };
 
 // This is T3 Code's installed local API (verified against 0.0.45). Keep its
 // discovery, authentication and wire formats here, away from the task lifecycle.
@@ -145,7 +145,7 @@ export class T3 {
     });
   }
 
-  async progress(task: ResearchTask): Promise<T3Progress> {
+  async progress(task: ResearchTask): Promise<AgentProgress> {
     const snapshot = shellSchema.parse(await this.request('/api/orchestration/shell', task.t3EnvironmentId));
     const thread = snapshot.threads.find(t => t.id === task.t3ThreadId);
     if (!thread) return { status: 'needs_attention', error: 'The T3 thread was not found. Check T3 Code before starting another task.' };

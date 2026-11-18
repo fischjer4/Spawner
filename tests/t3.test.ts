@@ -143,3 +143,35 @@ test('a completed T3 plan is readable when the agent supplied no final message',
     await f.engine.refresh(id); assert.equal(f.engine.tasks[0].answer, 'A proposed plan, not completed work.');
   } finally { await f.cleanup(); }
 });
+
+test('refreshing an unchanged T3 answer preserves its judgment, delivery, and archive state', async () => {
+  const f = await fixture();
+  const notifications: string[] = [];
+  let summaries = 0;
+  try {
+    const id = await f.engine.startManual('Check the project.', 't3');
+    f.engine.onNotify = title => { notifications.push(title); };
+    f.engine.models.summarize = async text => ({
+      status: ++summaries === 1 ? 'needs_input' : 'answer', spokenAnswer: text, sources: [],
+    });
+    f.finish();
+    await f.engine.refresh(id);
+    assert.equal(f.engine.tasks[0].status, 'needs_attention');
+    await f.engine.refresh(id);
+    assert.equal(f.store.tasks()[0].status, 'needs_attention');
+    assert.match(f.store.tasks()[0].error!, /needs your input/);
+    f.state.messages.at(-1).text = 'Here is the revised answer.';
+    await f.engine.refresh(id);
+    await f.engine.speak(id);
+    await f.engine.refresh(id);
+    assert.equal(f.engine.tasks[0].status, 'speaking');
+    f.engine.playbackEnded(id);
+    f.engine.archive(id);
+    const archivedAt = f.engine.tasks[0].archivedAt;
+    await f.engine.refresh(id);
+    assert.equal(f.store.tasks()[0].status, 'delivered');
+    assert.equal(f.store.tasks()[0].archivedAt, archivedAt);
+    assert.equal(summaries, 2);
+    assert.deepEqual(notifications, ['T3 needs your input', 'Your local task update is ready']);
+  } finally { await f.cleanup(); }
+});

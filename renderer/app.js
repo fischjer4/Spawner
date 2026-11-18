@@ -192,7 +192,7 @@ function renderTaskDetail() {
   if (task.destination === 't3') actions.append(actionButton('Open T3 Code ↗', () => call(api.action(task.id, 'open'))));
   else if (task.replicaId || task.workspaceName) actions.append(actionButton('Continue in Replicas ↗', () => call(api.action(task.id, 'open'))));
   if (['needs_attention', 'failed', 'researching'].includes(task.status) || task.error) actions.append(actionButton('Refresh', () => call(api.action(task.id, 'refresh'))));
-  if (!activeStatuses.includes(task.status)) actions.append(actionButton(isArchived(task) ? 'Move to Inbox' : 'Archive', async () => { await call(api.action(task.id, isArchived(task) ? 'restore' : 'archive')); closeTask(); toast(isArchived(task) ? 'Moved to Inbox.' : 'Archived. You can find it in History.'); }, 'text-button muted'));
+  if (!task.cancelRequested && !activeStatuses.includes(task.status)) actions.append(actionButton(isArchived(task) ? 'Move to Inbox' : 'Archive', async () => { await call(api.action(task.id, isArchived(task) ? 'restore' : 'archive')); closeTask(); toast(isArchived(task) ? 'Moved to Inbox.' : 'Archived. You can find it in History.'); }, 'text-button muted'));
   card.append(actions);
   if (task.error) card.append(element('p', 'task-error', task.error));
   if (task.spokenAnswer) card.append(element('p', 'answer-label', 'SUMMARY'), element('p', 'task-answer', task.spokenAnswer));

@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { AppState, Entry, Meeting, ResearchTask, Settings, DiagnosticRun, DiagnosticEvent, Decision, PendingRequest } from './types.js';
-import { T3Error, type T3 } from './t3.js';
+import type { AppState, Entry, Meeting, ResearchTask, Settings, DiagnosticRun, DiagnosticEvent, Decision, PendingRequest, RecordEvent } from './types.js';
+import { friendlyError } from './errors.js';
 import { Store } from './store.js';
 import { conversation, hasWakeName, TranscriptWatcher } from './transcript.js';
-import { ApiError, extractAnswer, Models, Replicas, taskPrompt, decisionRequest } from './services.js';
+import { Models, decisionRequest } from './services.js';
+import { FinishedAnswers, replaceAnswer } from './answers.js';
+import { ReplicasDestination, T3Destination, type AgentDestination, type CloudClient, type LocalClient } from './agent-destinations.js';
+import { TaskMonitor } from './task-monitor.js';
 
 export const LIVE_REQUEST_TIMING = { debounceMs: 1500, settleMs: 15000, idleMs: 60000, maxMs: 180000 };
 interface Candidate {
@@ -45,9 +48,11 @@ export class Engine {
   private candidateTimer?: NodeJS.Timeout;
   private decisionAbort?: AbortController;
   private speechAbort?: AbortController;
-  private tickBusy = false;
-  private refreshing = new Set<string>();
-  private pollTimes = new Map<string, number>();
+  private readonly monitor = new TaskMonitor();
+  private readonly answers = new FinishedAnswers();
+  private launching = new Set<string>();
+  private stopping = new Map<string, Promise<void>>();
+  private disposed = false;
   private lastSpeakingStarted = 0;
   private speechIntervals: { start: number; end: number }[] = [];
   private generation = 0;
@@ -60,9 +65,9 @@ export class Engine {
     private store: Store,
     private credentials: () => AppState['credentials'],
     public models: Pick<Models, 'decide' | 'speech' | 'summarize'>,
-    public replicas: Pick<Replicas, 'create' | 'wait' | 'history' | 'interrupt' | 'findByName' | 'rename'>,
+    public replicas: CloudClient,
     private readonly requestTiming = LIVE_REQUEST_TIMING,
-    public t3?: Pick<T3, 'prepare' | 'create' | 'progress' | 'interrupt'>,
+    private t3?: LocalClient,
   ) {
     this.tasks = store.tasks();
     for (const task of this.tasks) {
@@ -353,108 +358,54 @@ export class Engine {
       this.onChange();
     }
   }
+  private taskRun(task: ResearchTask, source: 'manual' | 'resumed'): DiagnosticRun {
+    const run = this.diagnosticRuns.find(r => r.taskId === task.id) ?? this.beginRun(source, task.question);
+    run.taskId = task.id;
+    return run;
+  }
+
+  private recorder(run: DiagnosticRun): RecordEvent {
+    return (...args) => this.record(run, ...args);
+  }
+
+  private destination(task: ResearchTask, run: DiagnosticRun): AgentDestination {
+    const context = {
+      task, settings: this.settings, credentials: this.credentials(), record: this.recorder(run),
+      checkpoint: () => this.save(task),
+    };
+    return task.destination === 't3'
+      ? new T3Destination(this.t3, context)
+      : new ReplicasDestination(this.replicas, context);
+  }
+
   async launch(task: ResearchTask): Promise<void> {
-    if (task.destination === 't3') return this.launchT3(task);
-    if (!this.credentials().replicas || !this.settings.environmentId) {
-      task.status = 'needs_attention'; task.error = 'Connect Replicas and choose an environment in Settings.'; this.save(task); return;
-    }
-    task.workspaceName = `sidekick-${task.id}`;
-    this.save(task);
-    const run = this.diagnosticRuns.find(r => r.taskId === task.id) ?? this.beginRun('manual', task.question);
-    run.taskId = task.id;
+    if (this.launching.has(task.id) || task.status !== 'starting') return;
+    this.launching.add(task.id);
+    const run = this.taskRun(task, 'manual');
+    const destination = this.destination(task, run);
     const started = Date.now();
-    const mode = task.mode ?? 'research';
-    const message = taskPrompt(task);
-    this.record(run, 'Replicas', `Sending ${mode} to Replicas with the original transcript`, 'pending', { name: task.workspaceName, environment_id: this.settings.environmentId, message, lifecycle_policy: 'sleep_when_done', plan_mode: mode !== 'implementation', mode });
     try {
-      const replicaId = await this.replicas.create(task.workspaceName, this.settings.environmentId, message, mode);
-      this.record(run, 'Replicas', 'Replicas confirmed the workspace', 'ok', { replicaId }, Date.now() - started);
-      task.replicaId = replicaId;
-      // Cancellation during create must still remember and stop the remote task.
-      if (task.status === 'cancelled') { this.save(task); await this.cancel(task.id); return; }
-      task.status = 'researching'; task.lastMessageAt = Date.now();
-      this.activity = `${mode === 'implementation' ? 'Implementation' : 'Research'} started: ${task.title}`;
-      this.onNotify(mode === 'implementation' ? 'Implementation started' : 'Research started', task.title, task.id);
-    } catch (error) {
-      this.record(run, 'Replicas', 'Send attempted, but launch was not confirmed. It may exist remotely; use Refresh, not a new launch.', 'error', { error: friendlyError(error) }, Date.now() - started);
-      task.status = 'needs_attention';
-      task.error = error instanceof ApiError && error.status < 500 ? error.message : 'Launch was not confirmed. Refresh checks for the existing workspace; Sidekick will not launch a duplicate.';
-    }
-    this.save(task);
-    if (task.replicaId) await this.nameWorkspace(task, run);
-  }
-  private async launchT3(task: ResearchTask): Promise<void> {
-    const run = this.diagnosticRuns.find(r => r.taskId === task.id) ?? this.beginRun('manual', task.question);
-    run.taskId = task.id;
-    try {
-      if (!this.t3 || !this.credentials().t3 || !this.settings.t3ProjectId) throw new T3Error('Connect T3 Code and choose a local project in Settings.');
-      const { project, environmentId } = await this.t3.prepare(this.settings.t3ProjectId);
-      if (task.status === 'cancelled') return;
-      task.t3ThreadId = task.id; task.t3EnvironmentId = environmentId; task.t3ProjectId = project.id;
-      this.save(task);
-      this.record(run, 'T3', 'Sending the original transcript to local T3 Code', 'pending', { threadId: task.t3ThreadId, project: project.title, model: project.modelSelection, message: taskPrompt(task) });
-      await this.t3.create(task, project);
-      this.record(run, 'T3', 'T3 Code accepted the local thread', 'ok', { threadId: task.t3ThreadId });
-      if (task.cancelRequested) { await this.cancelT3(task); this.save(task); return; }
-      task.status = 'researching'; task.error = undefined;
-      this.activity = `Local task started: ${task.title}`;
-      this.onNotify('Local T3 task started', task.title, task.id);
+      await destination.launch();
+      if (task.cancelRequested) {
+        await this.confirmStop(task, destination);
+        return;
+      }
+      task.status = 'researching';
+      task.error = undefined;
+      const label = task.mode === 'implementation' ? 'Implementation' : 'Research';
+      const local = task.destination === 't3';
+      this.activity = `${local ? 'Local task' : label} started: ${task.title}`;
+      this.onNotify(local ? 'Local T3 task started' : `${label} started`, task.title, task.id);
     } catch (error) {
       task.status = 'needs_attention';
-      task.error = task.t3ThreadId ? 'T3 launch was not confirmed. Refresh checks the existing thread; Sidekick will not launch a duplicate.' : friendlyError(error);
-      this.record(run, 'T3', task.error, 'error', { error: friendlyError(error) });
-    }
-    this.save(task);
-  }
-  private async refreshT3(task: ResearchTask): Promise<void> {
-    if (!this.t3 || !task.t3ThreadId) return;
-    if (task.cancelRequested) { await this.cancelT3(task); this.save(task); return; }
-    const run = this.diagnosticRuns.find(r => r.taskId === task.id) ?? this.beginRun('resumed', task.question);
-    run.taskId = task.id;
-    const progress = await this.t3.progress(task);
-    if (!this.tasks.includes(task) || task.status === 'cancelled' || task.cancelRequested) return;
-    this.record(run, 'Research', `T3 Code: ${progress.status}`, progress.error ? 'blocked' : 'ok');
-    if (progress.status !== 'ready' || !progress.answer) {
-      const changed = task.status !== progress.status;
-      task.status = progress.status; task.error = progress.error;
-      if (changed && progress.status === 'needs_attention') this.onNotify('T3 needs your input', task.title, task.id);
-      this.save(task); return;
-    }
-    const newAnswer = task.answer !== progress.answer;
-    const alreadySummarized = !newAnswer && !!task.spokenAnswer;
-    if (newAnswer) { task.archivedAt = undefined; task.spokenAnswer = undefined; task.sources = undefined; }
-    task.answer = progress.answer; task.error = undefined;
-    this.save(task);
-    if (!alreadySummarized) await this.prepareSummary(task, run);
-    else task.status = 'ready';
-    if (!this.tasks.includes(task) || (task.status as string) === 'cancelled' || task.cancelRequested) return;
-    if (newAnswer) this.onNotify(task.status === 'needs_attention' ? 'T3 needs your input' : 'Your local task update is ready', task.title, task.id);
-    this.activity = `Local response ready: ${task.title}`;
-    this.save(task);
-  }
-  private async cancelT3(task: ResearchTask): Promise<void> {
-    try {
-      if (!this.t3) throw new Error('T3 is not connected.');
-      const stopped = await this.t3.interrupt(task);
-      task.cancelRequested = !stopped;
-      task.status = stopped ? 'cancelled' : 'researching';
-      task.error = stopped ? undefined : 'Waiting for T3 Code to confirm cancellation…';
-    } catch {
-      task.status = 'needs_attention'; task.error = 'Could not confirm cancellation. Open T3 Code to stop the agent, or Refresh to retry.';
-    }
-  }
-  private async nameWorkspace(task: ResearchTask, run: DiagnosticRun): Promise<void> {
-    if (!task.replicaId || task.workspaceName !== `sidekick-${task.id}`) return;
-    // Keep the unique recovery name until the remote ID is saved.
-    // Replicas rejects whitespace in both create and rename requests.
-    const name = task.title.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80).replace(/-+$/, '') || 'research';
-    try {
-      await this.replicas.rename(task.replicaId, name);
-      task.workspaceName = name;
+      task.error = friendlyError(error);
+      // Keep an outstanding stop request even if creation was never confirmed.
+      if (task.cancelRequested) task.error += ' Refresh to check cancellation.';
+      this.record(run, task.destination === 't3' ? 'T3' : 'Replicas', task.error, 'error',
+        { error: friendlyError(error instanceof Error && error.cause ? error.cause : error) }, Date.now() - started);
+    } finally {
+      this.launching.delete(task.id);
       this.save(task);
-      this.record(run, 'Replicas', 'Named the Replicas workspace', 'ok', { replicaId: task.replicaId, name });
-    } catch (error) {
-      this.record(run, 'Replicas', 'Agent launched; naming failed. Refresh will retry naming.', 'error', { error: friendlyError(error) });
     }
   }
   async startManual(question: string, destination: 'replicas' | 't3' = 'replicas'): Promise<string> {
@@ -466,93 +417,57 @@ export class Engine {
     return task.id;
   }
   async tick(): Promise<void> {
-    if (this.tickBusy) return;
-    this.tickBusy = true;
-    try {
-      await this.watcher.poll();
-      const now = Date.now();
-      if (this.candidate && this.expired(this.candidate) && !this.decisionAbort) await this.evaluateCandidate();
-      this.advanceQueue();
-      for (const task of this.tasks.filter(t => t.status === 'researching')) {
-        if (now - (this.pollTimes.get(task.id) ?? 0) < 5000) continue;
-        this.pollTimes.set(task.id, now);
-        await this.refresh(task.id);
-      }
-    } finally { this.tickBusy = false; }
-  }
-  async refresh(id: string): Promise<void> {
-    if (this.refreshing.has(id)) return;
-    const task = this.task(id);
-    this.refreshing.add(id);
-    try {
-      if (task.destination === 't3') { await this.refreshT3(task); return; }
-      if (!task.replicaId && task.workspaceName) {
-        task.replicaId = await this.replicas.findByName(task.workspaceName) ?? undefined;
-        if (!task.replicaId) { task.error = 'No matching workspace was found among recent API tasks. Check Replicas before starting a new task.'; this.save(task); return; }
-        task.status = 'researching'; task.error = undefined; this.save(task);
-      }
-      if (!task.replicaId) return;
-      if (task.cancelRequested) { await this.cancel(id); return; }
-      const run = this.diagnosticRuns.find(r => r.taskId === task.id) ?? this.beginRun('resumed', task.question);
-      run.taskId = task.id;
-      await this.nameWorkspace(task, run);
-      const pollStarted = Date.now();
-      this.record(run, 'Research', 'Checking Replicas progress', 'pending', { replicaId: task.replicaId });
-      const state = await this.replicas.wait(task.replicaId);
-      this.record(run, 'Research', state.done ? 'Replicas finished; retrieving the answer' : `Replicas status: ${state.status}`, 'ok', state, Date.now() - pollStarted);
-      task.chatId = state.chats[0]?.id ?? task.chatId;
-      if (task.status === 'cancelled') return;
-      if (state.status === 'error') throw new Error('The Replicas workspace failed to start. Open Replicas for details.');
-      if (!state.done) {
-        // Pending approval/questions may leave the task waiting indefinitely; inspect periodically.
-        if (Date.now() - (task.lastMessageAt ?? task.createdAt) > 60000) {
-          const answer = extractAnswer(await this.replicas.history(task.replicaId, task.chatId));
-          if (answer.pending) { task.status = 'needs_attention'; task.error = 'The agent has a question or approval waiting in Replicas.'; this.onNotify('Agent needs your input', task.title); }
-          task.lastMessageAt = Date.now();
-        }
-        this.save(task); return;
-      }
-      const answer = extractAnswer(await this.replicas.history(task.replicaId, task.chatId));
-      if (!this.tasks.includes(task) || ['cancelled'].includes(task.status)) return;
-      const text = answer.result?.answer ?? answer.text;
-      const newAnswer = task.answer !== text;
-      if (newAnswer) task.archivedAt = undefined;
-      const alreadySummarized = task.answer === text && !!task.spokenAnswer;
-      task.answer = text;
-      if (answer.failed) { task.status = 'failed'; task.error = 'The research agent reported a failed turn. Open Replicas for details.'; }
-      else if (answer.pending || !text.trim()) {
-        task.status = 'needs_attention'; task.error = answer.pending ? 'The agent has a question or approval waiting in Replicas.' : 'The agent stopped without a readable answer. Review its response in Replicas.';
-      } else if (!alreadySummarized) {
-        // Preserve the agent's exact answer, even if the separate summary call fails.
-        task.spokenAnswer = undefined; task.sources = undefined; this.save(task);
-        await this.prepareSummary(task, run);
-        if (!this.tasks.includes(task) || ['cancelled'].includes(task.status)) return;
-        this.record(run, 'Answer', task.error ?? 'Answer ready in Sidekick', task.error ? 'blocked' : 'ok', { taskId: task.id, sinceTaskCreatedMs: Date.now() - task.createdAt });
-        this.activity = `Response ready: ${task.title}`;
-        if (newAnswer) this.onNotify(task.status === 'needs_attention' ? 'Agent needs your input' : task.mode === 'implementation' ? 'Your task update is ready' : 'Your answer is ready', task.title, task.id);
-      }
-      this.save(task);
-    } catch (error) { const run = this.diagnosticRuns.find(r => r.taskId === id); if (run) this.record(run, 'Research', friendlyError(error), 'error'); if (this.tasks.includes(task)) { task.error = friendlyError(error); this.save(task); } }
-    finally { this.refreshing.delete(id); }
+    await this.watcher.poll();
+    if (this.candidate && this.expired(this.candidate) && !this.decisionAbort) await this.evaluateCandidate();
+    this.advanceQueue();
+    await this.monitor.poll(this.tasks, id => this.refresh(id));
   }
 
-  private async prepareSummary(task: ResearchTask, run: DiagnosticRun, signal?: AbortSignal): Promise<void> {
-    const started = Date.now();
-    this.record(run, 'Summary', 'Preparing the answer for Sidekick', 'pending', { model: this.settings.textModel });
-    try {
-      const summary = await this.models.summarize(task.answer!, signal);
-      if (signal?.aborted || !this.tasks.includes(task) || task.status === 'cancelled') return;
-      task.spokenAnswer = summary.spokenAnswer; task.sources = summary.sources;
-      task.status = summary.status === 'needs_input' ? 'needs_attention' : 'ready';
-      task.error = summary.status === 'needs_input' ? `The agent needs your input. Continue in ${task.destination === 't3' ? 'T3 Code' : 'Replicas'}.` : undefined;
-      this.record(run, 'Summary', 'Summary returned', 'ok', undefined, Date.now() - started);
-    } catch (error) {
-      if (signal?.aborted || !this.tasks.includes(task) || task.status === 'cancelled') return;
-      task.status = 'ready';
-      task.error = 'The full answer is ready. The spoken summary could not be prepared. Read to me or Refresh will try again.';
-      this.record(run, 'Summary', friendlyError(error), 'error', { errorType: error instanceof Error ? error.name : 'Unknown' }, Date.now() - started);
-    }
-    this.save(task);
+  refresh(id: string): Promise<void> {
+    return this.monitor.refresh(id, async () => {
+      const task = this.task(id);
+      if (this.launching.has(id) || (task.status === 'cancelled' && !task.cancelRequested)) return;
+      const run = this.taskRun(task, 'resumed');
+      const destination = this.destination(task, run);
+      if (task.cancelRequested) return this.confirmStop(task, destination);
+      try {
+        const progress = await destination.progress();
+        if (!progress || !this.active(task)) return;
+        const local = task.destination === 't3';
+        if (this.playing === id && (progress.status !== 'ready' || task.answer !== progress.answer)) this.stopSpeech();
+        if (progress.status === 'ready') {
+          const changed = await this.answers.accept(task, progress.answer, this.answerContext(task, run));
+          if (changed && this.active(task)) {
+            this.activity = `${local ? 'Local response' : 'Response'} ready: ${task.title}`;
+            const title = task.status === 'needs_attention' ? (local ? 'T3 needs your input' : 'Agent needs your input')
+              : local ? 'Your local task update is ready' : task.mode === 'implementation' ? 'Your task update is ready' : 'Your answer is ready';
+            this.onNotify(title, task.title, task.id);
+            this.onChange();
+          }
+          return;
+        }
+        const changed = task.status !== progress.status;
+        if (progress.answer !== undefined) replaceAnswer(task, progress.answer);
+        task.status = progress.status;
+        task.error = progress.error;
+        this.save(task);
+        if (changed && progress.status === 'needs_attention') this.onNotify(local ? 'T3 needs your input' : 'Agent needs your input', task.title, task.id);
+      } catch (error) {
+        this.record(run, 'Research', friendlyError(error), 'error');
+        if (this.active(task)) { task.error = friendlyError(error); this.save(task); }
+      }
+    });
+  }
+
+  private active(task: ResearchTask): boolean {
+    return !this.disposed && this.tasks.includes(task) && task.status !== 'cancelled' && !task.cancelRequested;
+  }
+
+  private answerContext(task: ResearchTask, run: DiagnosticRun) {
+    return {
+      save: () => this.save(task), active: () => this.active(task), record: this.recorder(run),
+      summarize: this.models.summarize.bind(this.models), model: this.settings.textModel,
+    };
   }
 
   async speak(id: string): Promise<void> {
@@ -564,9 +479,8 @@ export class Engine {
     this.activity = 'Preparing the spoken answer…'; this.onChange();
     try {
       if (!task.spokenAnswer) {
-        const run = this.diagnosticRuns.find(r => r.taskId === id) ?? this.beginRun('manual', task.question);
-        run.taskId = id;
-        await this.prepareSummary(task, run, controller.signal);
+        const run = this.taskRun(task, 'manual');
+        await this.answers.prepareSummary(task, this.answerContext(task, run), controller.signal);
         if (controller.signal.aborted) return;
         if (!task.spokenAnswer || task.status !== 'ready') { this.playing = null; this.activity = task.error ?? 'The spoken answer is not ready.'; this.onChange(); return; }
       }
@@ -575,7 +489,8 @@ export class Engine {
       task.status = 'speaking'; this.lastSpeakingStarted = Date.now(); this.save(task);
       this.onPlay(id, audio);
     } catch (error) {
-      if (!controller.signal.aborted) { task.error = friendlyError(error); this.save(task); }
+      if (controller.signal.aborted) return;
+      task.error = friendlyError(error); this.save(task);
       this.playing = null; this.onChange();
     }
   }
@@ -595,46 +510,43 @@ export class Engine {
   async cancel(id: string): Promise<void> {
     const task = this.task(id);
     if (this.playing === id) this.stopSpeech();
-    const previous = task.status;
-    task.status = 'cancelled'; this.save(task);
-    if (task.destination === 't3') {
-      task.cancelRequested = true;
-      if (task.t3ThreadId) await this.cancelT3(task);
-      this.save(task); return;
-    }
-    if (!task.replicaId) return;
-    try {
-      const state = await this.replicas.wait(task.replicaId);
-      if (state.status === 'preparing' && state.chats.length === 0) {
-        task.status = 'researching'; task.cancelRequested = true; task.error = 'Stopping as soon as the workspace is ready…'; this.save(task); return;
-      }
-      for (const chat of state.chats) if (chat.processing) await this.replicas.interrupt(task.replicaId, chat.id);
-      task.cancelRequested = false; task.error = undefined;
-    } catch (error) { task.status = previous === 'starting' ? 'needs_attention' : previous; task.error = 'Could not confirm cancellation. Open Replicas to stop the agent.'; }
+    if (task.status === 'cancelled' && !task.cancelRequested) return;
+    task.cancelRequested = true;
+    task.error = 'Cancellation requested…';
     this.save(task);
+    // The launch owns its checkpoint until a remote locator or an error arrives.
+    if (this.launching.has(id)) return;
+    await this.confirmStop(task, this.destination(task, this.taskRun(task, 'resumed')));
+  }
+
+  private confirmStop(task: ResearchTask, destination: AgentDestination): Promise<void> {
+    const running = this.stopping.get(task.id);
+    if (running) return running;
+    const attempt = destination.stop().then(result => {
+      task.cancelRequested = !result.stopped;
+      task.status = result.stopped ? 'cancelled' : 'researching';
+      task.error = result.stopped ? undefined : result.message;
+    }).catch(() => {
+      const name = task.destination === 't3' ? 'T3 Code' : 'Replicas';
+      task.status = 'needs_attention';
+      task.error = `Could not confirm cancellation. Open ${name} to stop the agent, or Refresh to retry.`;
+    }).finally(() => {
+      this.stopping.delete(task.id);
+      this.save(task);
+    });
+    this.stopping.set(task.id, attempt);
+    return attempt;
   }
   archive(id: string, archived = true): void {
     const task = this.task(id);
-    if (['starting', 'researching', 'speaking'].includes(task.status) || this.playing === id) throw new Error('Wait for this task to finish before archiving it.');
+    if (task.cancelRequested || ['starting', 'researching', 'speaking'].includes(task.status) || this.playing === id) throw new Error('Wait for this task to finish before archiving it.');
     task.archivedAt = archived ? Date.now() : undefined;
     this.save(task);
   }
-  remove(id: string): void { const task = this.task(id); if (['starting', 'researching', 'speaking'].includes(task.status)) throw new Error('Stop this task before removing it.'); if (this.playing === id) this.stopSpeech(); this.tasks = this.tasks.filter(t => t.id !== id); this.store.deleteTask(id); this.onChange(); }
+  remove(id: string): void { const task = this.task(id); if (task.cancelRequested || ['starting', 'researching', 'speaking'].includes(task.status)) throw new Error('Stop this task before removing it.'); if (this.playing === id) this.stopSpeech(); this.tasks = this.tasks.filter(t => t.id !== id); this.monitor.forget(id); this.store.deleteTask(id); this.onChange(); }
   private task(id: string): ResearchTask { const task = this.tasks.find(t => t.id === id); if (!task) throw new Error('Task not found.'); return task; }
-  private save(task: ResearchTask): void { this.store.saveTask(task); this.onChange(); }
-  dispose(): void { this.generation++; this.candidate = undefined; this.queuedCandidates = []; clearTimeout(this.candidateTimer); this.decisionAbort?.abort(); this.stopSpeech(); }
-}
-export function friendlyError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof T3Error) return error.message;
-  if (error instanceof Error) {
-    if (/invalid schema|response_format/i.test(error.message)) return 'The selected model rejected the summary format. The full answer is still available.';
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') return 'The request timed out. Try again when the connection is available.';
-    // AI SDK errors can include provider request bodies; only expose safe, short messages.
-    if (/key|auth|401/i.test(error.message)) return 'Check the service API key in Settings.';
-    if (/billing|credit|402/i.test(error.message)) return 'The service needs available credits or billing setup.';
-    if (/model|404/i.test(error.message)) return 'The selected model is unavailable. Check the model ID in Settings.';
-  }
-  return 'The service could not complete this request. Check the connection and try again.';
+  private save(task: ResearchTask): void { if (!this.disposed && this.tasks.includes(task)) { this.store.saveTask(task); this.onChange(); } }
+  dispose(): void { this.generation++; this.candidate = undefined; this.queuedCandidates = []; clearTimeout(this.candidateTimer); this.decisionAbort?.abort(); this.stopSpeech(); this.disposed = true; }
 }
 
 function requestTitle(request: string): string {

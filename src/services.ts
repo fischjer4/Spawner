@@ -1,6 +1,7 @@
 import { createGateway } from '@ai-sdk/gateway';
 import { experimental_decide as decide, generateText, generateSpeech, Output } from 'ai';
 import { z } from 'zod';
+import { UserFacingError } from './errors.js';
 import type { ResearchTask, TaskMode, Decision, Settings } from './types.js';
 
 export const resultSchema = z.object({
@@ -84,7 +85,7 @@ export class Models {
   }
 }
 
-export class ApiError extends Error {
+export class ApiError extends UserFacingError {
   constructor(public status: number, message: string) { super(message); }
 }
 export class Replicas {

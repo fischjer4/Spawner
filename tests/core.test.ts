@@ -252,6 +252,9 @@ test('summary failure keeps the original answer and can be retried without relau
     f.models.summarize = async () => ({ status: 'needs_input', spokenAnswer: 'Which plan are you on?', sources: [] });
     await f.engine.refresh(id);
     assert.equal(f.engine.tasks[0].status, 'needs_attention');
+    await f.engine.refresh(id);
+    assert.equal(f.store.tasks()[0].status, 'needs_attention');
+    assert.match(f.store.tasks()[0].error!, /needs your input/);
     assert.equal(f.creates(), 1);
   } finally { await f.cleanup(); }
 });
@@ -748,4 +751,109 @@ test('an unfinished wake yields to another speaker’s full request without losi
     assert.equal(f.engine.tasks[0].title, 'research Electron.');
     assert.equal(f.engine.snapshot().requests[0].speaker, 'You'); assert.equal(f.engine.snapshot().requests[0].phase, 'heard');
   } finally { await f.cleanup(); }
+});
+
+test('a cancelled launch with a lost reply recovers and stops the original workspace after restart', async () => {
+  const f = await setupEngine();
+  let resumed: Engine | undefined;
+  let creates = 0;
+  let loseReply!: (error: Error) => void;
+  f.replicas.create = () => { creates++; return new Promise((_, reject) => { loseReply = reject; }); };
+  const interrupts: string[][] = [];
+  try {
+    const launching = f.engine.startManual('Check the active project.');
+    const task = f.engine.tasks[0];
+    await f.engine.cancel(task.id);
+    assert.equal(f.store.tasks()[0].cancelRequested, true);
+    loseReply(new Error('Lost create response'));
+    await launching;
+    f.engine.dispose();
+    const client = {
+      ...f.replicas,
+      findByName: async (name: string) => {
+        assert.equal(name, `sidekick-${task.id}`);
+        return 'original-workspace';
+      },
+      wait: async () => ({ done: false, status: 'running', chats: [{ id: 'original-chat', processing: true }] }),
+      interrupt: async (id: string, chat: string) => { interrupts.push([id, chat]); },
+    };
+    resumed = new Engine(settings, f.store, () => ({ gateway: true, replicas: true }), f.models, client);
+    await resumed.refresh(task.id);
+    await resumed.refresh(task.id);
+    assert.deepEqual(interrupts, [['original-workspace', 'original-chat']]);
+    assert.equal(f.store.tasks()[0].status, 'cancelled');
+    assert.equal(f.store.tasks()[0].cancelRequested, false);
+    assert.equal(creates, 1);
+  } finally { resumed?.dispose(); await f.cleanup(); }
+});
+
+test('Wispr reads a correction and other tasks finish while one agent poll is waiting', async () => {
+  const f = await setupEngine({ debounceMs: 60000, settleMs: 60000, idleMs: 120000, maxMs: 180000 });
+  const root = await mkdtemp(join(tmpdir(), 'sidekick-monitor-'));
+  const db = new DatabaseSync(join(root, 'flow.sqlite'));
+  let release!: (state: Awaited<ReturnType<typeof f.replicas.wait>>) => void;
+  const held = new Promise<Awaited<ReturnType<typeof f.replicas.wait>>>(resolve => { release = resolve; });
+  let polling!: () => void;
+  const started = new Promise<void>(resolve => { polling = resolve; });
+  let waits = 0;
+  let slowTick: Promise<void> | undefined;
+  try {
+    db.exec("CREATE TABLE Meetings(id TEXT,title TEXT,endedAt INTEGER,isDeleted INTEGER,isTourDemo INTEGER); INSERT INTO Meetings VALUES('meeting','Call',NULL,0,0)");
+    const folder = join(root, 'meetings/meeting');
+    await mkdir(folder, { recursive: true });
+    const file = join(folder, 'live.ndjson');
+    await writeFile(file, '');
+    f.engine.updateSettings({ ...settings, wisprDirectory: root });
+    await f.engine.tick();
+    await delay(20); // Wispr entries must be newer than the startup baseline.
+    await appendFile(file, line('first', Date.now(), 'Replicas, research the change.'));
+    const slow = { ...task(), status: 'researching' as const, replicaId: 'slow' };
+    const fast = { ...task(), status: 'researching' as const, replicaId: 'fast' };
+    f.engine.tasks.push(slow, fast);
+    const normal = f.replicas.wait;
+    f.engine.replicas.wait = async id => {
+      if (id !== 'slow') return normal();
+      waits++; polling();
+      return held;
+    };
+    slowTick = f.engine.tick();
+    await started;
+    await appendFile(file, line('second', Date.now(), 'Include the migration too.'));
+    await f.engine.tick();
+    assert.match(f.engine.snapshot().requests[0].text, /Include the migration too/);
+    assert.equal(f.engine.tasks.find(t => t.id === fast.id)?.status, 'ready');
+    assert.equal(waits, 1);
+  } finally {
+    release({ done: false, status: 'running', chats: [] });
+    await slowTick;
+    db.close();
+    await f.cleanup();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Refresh and Read to me share a pending summary for the same answer', async () => {
+  const f = await setupEngine();
+  const item = { ...task(), replicaId: 'replica', answer: result.answer, spokenAnswer: undefined };
+  f.engine.tasks.push(item);
+  let summaries = 0;
+  let finish!: () => void;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  let checking!: () => void;
+  const started = new Promise<void>(resolve => { checking = resolve; });
+  f.models.summarize = async () => {
+    summaries++; checking();
+    await pending;
+    return { status: 'answer', spokenAnswer: result.spokenAnswer, sources: result.sources };
+  };
+  try {
+    const refresh = f.engine.refresh(item.id);
+    await started;
+    const reading = f.engine.speak(item.id);
+    finish();
+    await Promise.all([refresh, reading]);
+    assert.equal(summaries, 1);
+    assert.equal(f.engine.playing, item.id);
+    assert.equal(f.store.tasks()[0].status, 'speaking');
+  } finally { finish(); await f.cleanup(); }
 });

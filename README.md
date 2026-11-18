@@ -116,6 +116,29 @@ The app is produced at `release/mac-arm64/Sidekick.app`. For local use, sign it 
 
 The automated tests cover real transcript file changes, deduplication, stale/cloud transcript rejection, completion parsing, request cancellation, lost-response recovery, restart behavior, and notification-only completion. Provider responses are fixtures in these tests; they do **not** establish Jev's real-world classification accuracy or validate a live Zoom call.
 
+### Optional skills for Codex and Cursor
+
+To review Sidekick's architecture in Codex, install the skill once for your user account, then invoke `$improve-codebase-architecture` from a Sidekick thread.
+
+```sh
+npx skills add https://github.com/mattpocock/skills --skill improve-codebase-architecture --agent codex --global --yes
+```
+
+To install pstack in Cursor, enter `/add-plugin pstack` in Cursor chat. Start with `/setup-pstack` to choose models or `/poteto-mode` to use the defaults. [pstack guide](https://github.com/cursor/plugins/tree/main/pstack/docs/guide)
+
+To install pstack's skills in Codex, run the following once. It keeps the skills, playbooks, and guides together under `~/.agents/skills/pstack`. The final copy runs only when the destination is new.
+
+```sh
+pstack_source=$(mktemp -d) &&
+  git clone --quiet --depth 1 --filter=blob:none --sparse https://github.com/cursor/plugins.git "$pstack_source" &&
+  git -C "$pstack_source" sparse-checkout set pstack &&
+  mkdir -p ~/.agents/skills &&
+  mkdir ~/.agents/skills/pstack &&
+  cp -R "$pstack_source"/pstack/{plugin.json,skills,docs,agents,README.md,LICENSE} ~/.agents/skills/pstack/
+```
+
+In your next Codex turn, invoke `$pstack:poteto-mode`.
+
 ## Main files
 
 - `src/transcript.ts`: read-only Wispr watcher and normalized utterances.

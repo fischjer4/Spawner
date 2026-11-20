@@ -25,7 +25,7 @@ interface Candidate {
 }
 function addressOnly(candidate: Candidate): boolean {
   const words = candidate.entries.map(entry => entry.text).join(' ').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-  return /^(?:(?:hey|hi|hello|okay|ok|so|um) )*(?:replicas?|sidekick|t3|t three|tee three)$/.test(words);
+  return /^(?:(?:hey|hi|hello|okay|ok|so|um) )*(?:replicas?|spawner|t3|t three|tee three)$/.test(words);
 }
 
 // Only an explicit closing instruction shortens the meeting fallback. A period or
@@ -74,7 +74,7 @@ export class Engine {
       if (task.status === 'speaking') { task.status = 'ready'; store.saveTask(task); }
       if (task.status === 'starting') {
         task.status = 'needs_attention';
-        task.error = 'Sidekick restarted during launch. Refresh to check for the existing workspace before trying again.';
+        task.error = 'Spawner restarted during launch. Refresh to check for the existing workspace before trying again.';
         store.saveTask(task);
       }
     }
@@ -197,7 +197,7 @@ export class Engine {
     if (blocked || !fresh.length) {
       const run = this.beginRun(meeting.source === 'dictation' ? 'dictation' : 'live', conversation(entries));
       this.record(run, 'Transcript', 'Received transcript from Wispr', 'ok', { meetingId: meeting.id, entries });
-      this.record(run, 'Gate', `${blocked ?? 'Ignored during Sidekick voice playback.'} Jev not called; nothing sent to Replicas.`, 'blocked');
+      this.record(run, 'Gate', `${blocked ?? 'Ignored during Spawner voice playback.'} Jev not called; nothing sent to Replicas.`, 'blocked');
       return;
     }
     // A speaker's continuation belongs to their own request. Another participant's
@@ -211,7 +211,7 @@ export class Engine {
       const run = existing?.run ?? this.beginRun(meeting.source === 'dictation' ? 'dictation' : 'live', conversation(spoken));
       this.record(run, 'Transcript', `Received ${meeting.source === 'dictation' ? 'completed dictation' : `${spoken.length} fresh ${spoken.length === 1 ? 'entry' : 'entries'}`} from Wispr`, 'ok', { source: meeting.source ?? 'meeting', meetingId: meeting.id, entries: spoken, speechToReadMs: Date.now() - Math.max(...spoken.map(e => e.epoch)) });
       if (!existing && !wake) {
-        this.record(run, 'Gate', 'No wake name found (Replicas, T3, or Sidekick). Jev not called; nothing sent to Replicas.', 'blocked');
+        this.record(run, 'Gate', 'No wake name found (Replicas, T3, or Spawner). Jev not called; nothing sent to Replicas.', 'blocked');
         continue;
       }
       const candidate: Candidate = existing ?? {
@@ -332,7 +332,7 @@ export class Engine {
         this.record(candidate.run, decision.destination === 't3' ? 'T3' : 'Replicas', 'Cancellation requested; no new research will be launched.');
         const running = this.tasks.filter(t => t.meetingId === candidate.meeting.id && (t.destination ?? 'replicas') === decision.destination && ['starting', 'researching', 'needs_attention'].includes(t.status));
         if (running.length === 1) { await this.cancel(running[0].id); this.activity = 'Cancellation requested. Check the task for its status.'; }
-        else this.activity = 'Choose which task to cancel in Sidekick.';
+        else this.activity = 'Choose which task to cancel in Spawner.';
         this.record(candidate.run, decision.destination === 't3' ? 'T3' : 'Replicas', this.activity, running.length === 1 ? 'ok' : 'blocked');
         this.detection = { request, message: this.activity, at: Date.now() };
         return;
@@ -550,5 +550,5 @@ export class Engine {
 }
 
 function requestTitle(request: string): string {
-  return request.replace(/^(?:You|Speaker|Other speaker \d*):\s*/, '').replace(/^(?:Hey[, ]+)?(?:Replicas?|Sidekick|T\s*3|T(?:ee)? three)[,:.!]?\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Replicas task';
+  return request.replace(/^(?:You|Speaker|Other speaker \d*):\s*/, '').replace(/^(?:Hey[, ]+)?(?:Replicas?|Spawner|T\s*3|T(?:ee)? three)[,:.!]?\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Replicas task';
 }

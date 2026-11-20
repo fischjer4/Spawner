@@ -1,5 +1,5 @@
 {
-  "name": "sidekick-call-assistant",
+  "name": "spawner-call-assistant",
   "version": "0.6.0",
   "description": "A quiet research companion for your Zoom calls",
   "author": "Jeremy Fischer",
@@ -31,8 +31,8 @@
     "typescript": "^5.9.0"
   },
   "build": {
-    "appId": "com.jeremyfischer.sidekick",
-    "productName": "Sidekick",
+    "appId": "com.jeremyfischer.spawner",
+    "productName": "Spawner",
     "directories": {
       "output": "release"
     },

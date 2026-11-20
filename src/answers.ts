@@ -41,7 +41,7 @@ export class FinishedAnswers {
     context.save();
     await this.prepareSummary(task, context);
     if (!context.active()) return false;
-    context.record('Answer', task.error ?? 'Answer ready in Sidekick', task.error ? 'blocked' : 'ok',
+    context.record('Answer', task.error ?? 'Answer ready in Spawner', task.error ? 'blocked' : 'ok',
       { taskId: task.id, sinceTaskCreatedMs: Date.now() - task.createdAt });
     return changed;
   }
@@ -72,7 +72,7 @@ function inputMessage(task: ResearchTask): string {
 async function summarize(task: ResearchTask, answer: string, context: AnswerContext, signal?: AbortSignal): Promise<void> {
   const started = Date.now();
   const current = () => !signal?.aborted && context.active() && task.answer === answer;
-  context.record('Summary', 'Preparing the answer for Sidekick', 'pending', { model: context.model });
+  context.record('Summary', 'Preparing the answer for Spawner', 'pending', { model: context.model });
   try {
     const summary = await context.summarize(answer, signal);
     if (!current()) return;

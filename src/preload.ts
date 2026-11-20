@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-contextBridge.exposeInMainWorld('sidekick', {
+contextBridge.exposeInMainWorld('spawner', {
   clearDiagnostics: () => ipcRenderer.invoke('diagnostics:clear'),
   copyDiagnostics: () => ipcRenderer.invoke('diagnostics:copy'),
   testJev: (input: unknown) => ipcRenderer.invoke('diagnostics:test', input),

@@ -12,8 +12,8 @@ import { T3, t3ConnectionSchema, type T3Connection } from './t3.js';
 import type { Settings } from './types.js';
 
 const smoke = process.argv.includes('--smoke-test');
-if (process.env.SIDEKICK_TEST_DATA && smoke) app.setPath('userData', process.env.SIDEKICK_TEST_DATA);
-app.setName('Sidekick');
+if (process.env.SPAWNER_TEST_DATA && smoke) app.setPath('userData', process.env.SPAWNER_TEST_DATA);
+app.setName('Spawner');
 let window: BrowserWindow;
 let tray: Tray;
 let engine: Engine;
@@ -62,15 +62,15 @@ function bindNotification(notification: Notification, taskId?: string) {
   notification.on('action', (event, index) => {
     showTask(taskId);
     if ((event.actionIndex ?? index) === 0 && taskId && engine.tasks.some(t => t.id === taskId)) {
-      void engine.speak(taskId).catch(() => { engine.activity = 'Could not read the answer. Try Read to me in Sidekick.'; broadcast(); });
+      void engine.speak(taskId).catch(() => { engine.activity = 'Could not read the answer. Try Read to me in Spawner.'; broadcast(); });
     }
   });
   notification.on('close', () => notifications.delete(notification.id));
   notification.on('show', () => engine.notificationEvent(taskId, 'macOS accepted the notification. Banner visibility follows your notification and Focus settings.', 'ok'));
   notification.on('failed', (_event, error) => {
     notifications.delete(notification.id);
-    engine.notificationEvent(taskId, `macOS could not show the notification: ${String(error).slice(0, 300)}. Check Sidekick in System Settings → Notifications.`, 'error');
-    engine.activity = 'Notifications could not be shown. Check Sidekick in System Settings → Notifications.';
+    engine.notificationEvent(taskId, `macOS could not show the notification: ${String(error).slice(0, 300)}. Check Spawner in System Settings → Notifications.`, 'error');
+    engine.activity = 'Notifications could not be shown. Check Spawner in System Settings → Notifications.';
     broadcast();
   });
 }
@@ -79,7 +79,7 @@ function notify(title: string, body: string, taskId?: string) {
   if (!Notification.isSupported()) { engine.notificationEvent(taskId, 'Desktop notifications are unavailable.', 'error'); return; }
   const task = engine.tasks.find(t => t.id === taskId);
   const canRead = !!task && !!(task.answer || task.spokenAnswer) && ['ready', 'delivered'].includes(task.status);
-  const id = taskId ? `sidekick-answer:${taskId}` : `sidekick:${title}`;
+  const id = taskId ? `spawner-answer:${taskId}` : `spawner:${title}`;
   notifications.get(id)?.close();
   const notification = new Notification({ id, title, body, silent: true,
     ...(canRead ? { actions: [{ type: 'button' as const, text: 'Read to me' }, { type: 'button' as const, text: 'Read answer' }] } : {}),
@@ -116,13 +116,13 @@ function broadcast() {
     const key = `${label}:${count}:${engine.playing}`;
     if (key !== lastTrayStatus) {
       lastTrayStatus = key;
-      tray.setToolTip(`Sidekick · ${label}${count ? ` · ${count} working` : ''}`);
+      tray.setToolTip(`Spawner · ${label}${count ? ` · ${count} working` : ''}`);
       tray.setContextMenu(Menu.buildFromTemplate([
-        { label: `Sidekick · ${label}`, enabled: false },
-        { label: 'Open Sidekick', click: show },
+        { label: `Spawner · ${label}`, enabled: false },
+        { label: 'Open Spawner', click: show },
         { label: engine.settings.enabled ? 'Pause listening' : 'Resume listening', click: () => { engine.updateSettings({ ...engine.settings, enabled: !engine.settings.enabled }); } },
         { label: 'Stop speaking', accelerator: 'CommandOrControl+Shift+.', click: () => { engine.stopSpeech(); } },
-        { type: 'separator' }, { label: 'Quit Sidekick', click: () => app.quit() },
+        { type: 'separator' }, { label: 'Quit Spawner', click: () => app.quit() },
       ]));
     }
   }, 100);
@@ -136,7 +136,7 @@ function registerIPC() {
   handle('state', () => engine.snapshot());
   handle('notifications:test', () => {
     const task = engine.tasks.find(t => ['ready', 'delivered'].includes(t.status) && (t.answer || t.spokenAnswer));
-    notify('Sidekick · test notification', task?.title ?? 'You’ll see a notification here when an agent’s response is ready.', task?.id);
+    notify('Spawner · test notification', task?.title ?? 'You’ll see a notification here when an agent’s response is ready.', task?.id);
   });
   handle('diagnostics:clear', () => engine.clearDiagnostics());
   handle('diagnostics:copy', () => {
@@ -235,7 +235,7 @@ else {
     nativeTheme.themeSource = 'light';
     window = new BrowserWindow({
       width: 940, height: 780, minWidth: 780, minHeight: 630, show: false,
-      title: 'Sidekick', titleBarStyle: 'hiddenInset', backgroundColor: '#ffffff',
+      title: 'Spawner', titleBarStyle: 'hiddenInset', backgroundColor: '#ffffff',
       webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
     });
     window.on('close', event => { if (!quitting) { event.preventDefault(); window.hide(); } });
@@ -252,7 +252,7 @@ else {
       window.webContents.send('audio:play', { id, ...audio });
       setTimeout(() => { if (engine.playing === id) engine.stopSpeech(); }, 120000).unref();
     };
-    window.webContents.on('render-process-gone', () => { engine.stopSpeech(); engine.activity = 'The window stopped responding. Your tasks are saved; reopen Sidekick.'; });
+    window.webContents.on('render-process-gone', () => { engine.stopSpeech(); engine.activity = 'The window stopped responding. Your tasks are saved; reopen Spawner.'; });
     engine.onStopAudio = () => window.webContents.send('audio:stop');
     registerIPC();
     await window.loadFile(join(app.getAppPath(), 'renderer/index.html'));
@@ -261,8 +261,8 @@ else {
       // Notification Center can be slow to respond; it must not delay the window.
       void Notification.getHistory().then(history => {
         for (const notification of history) {
-          if (!notification.id.startsWith('sidekick-answer:')) continue;
-          const id = notification.id.slice('sidekick-answer:'.length);
+          if (!notification.id.startsWith('spawner-answer:')) continue;
+          const id = notification.id.slice('spawner-answer:'.length);
           if (!notifications.has(notification.id) && engine.tasks.some(t => t.id === id)) bindNotification(notification, id);
         }
       }).catch(() => engine.notificationEvent(undefined, 'Could not restore previous macOS notifications.', 'error'));
@@ -278,9 +278,9 @@ else {
       // A packaged-runtime smoke check: secure preload, real renderer, SQLite and native APIs.
       try {
         await engine.watcher.poll();
-        const state = await window.webContents.executeJavaScript('window.sidekick.state()');
+        const state = await window.webContents.executeJavaScript('window.spawner.state()');
         const probe = await window.webContents.executeJavaScript('({title: document.title, text: document.body.innerText, nodeExposed: typeof window.require !== "undefined"})');
-        if (!state.ok || probe.nodeExposed || !probe.text.includes('Sidekick')) throw new Error('Renderer smoke check failed');
+        if (!state.ok || probe.nodeExposed || !probe.text.includes('Spawner')) throw new Error('Renderer smoke check failed');
         await window.webContents.executeJavaScript('document.querySelector("[data-tab=connections]").click()');
         const connections = await window.webContents.executeJavaScript('document.getElementById("connections").classList.contains("active")');
         if (!connections) throw new Error('Connections navigation failed');
@@ -288,7 +288,7 @@ else {
         if (!setup.includes('Answers arrive quietly.') || /Loopback|Enable audio monitoring|Speak automatically/.test(setup)) throw new Error('Simplified setup check failed');
         await new Promise(resolve => setTimeout(resolve, 250));
         const shot = await window.webContents.capturePage();
-        await writeFile('/tmp/sidekick-smoke.png', shot.toPNG());
+        await writeFile('/tmp/spawner-smoke.png', shot.toPNG());
         // A labelled test fixture exercises diagnostics rendering and the no-launch test boundary.
         engine.models = { decide: async () => ({ invoked: 0.95, complete: 0.9, destination: 'replicas', action: 'research' }), speech: models.speech.bind(models), summarize: models.summarize.bind(models) };
         const smokeText = 'Replicas: could you go research that and come back to me with an answer?';
@@ -297,13 +297,13 @@ else {
         window.webContents.send('state', engine.snapshot());
         await window.webContents.executeJavaScript('document.querySelector("[data-tab=diagnostics]").click()');
         await new Promise(resolve => setTimeout(resolve, 250));
-        await writeFile('/tmp/sidekick-diagnostics-overview.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-diagnostics-overview.png', (await window.webContents.capturePage()).toPNG());
         await window.webContents.executeJavaScript('document.querySelectorAll("#diagnostics details").forEach(d => d.open = true)');
         const diagnosticText = await window.webContents.executeJavaScript('document.getElementById("diagnostics").innerText');
         if (!diagnosticText.includes('Jev returned a decision') || !diagnosticText.includes('candidateUtterances') || !diagnosticText.includes('0.95') || !diagnosticText.includes('Not sent: this is a Jev-only test.')) throw new Error('Diagnostics rendering failed');
         if (engine.tasks.length) throw new Error('Jev-only smoke test unexpectedly created a task');
         await window.webContents.executeJavaScript('document.querySelectorAll("#diagnostics details").forEach(d => d.open = false)');
-        await writeFile('/tmp/sidekick-diagnostics-smoke.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-diagnostics-smoke.png', (await window.webContents.capturePage()).toPNG());
         const readTask = { id: '00000000-0000-4000-8000-000000000001', meetingId: 'smoke', title: 'Electron menu-bar support', question: 'Does Electron support menu-bar apps?', context: '', createdAt: Date.now(), status: 'ready' as const, answer: 'Yes. Electron supports macOS menu-bar apps.', error: 'The spoken summary could not be prepared.' };
         engine.tasks.push(readTask); store.saveTask(readTask);
         engine.models.summarize = async () => ({ status: 'answer', spokenAnswer: 'Yes. Electron supports macOS menu-bar apps.', sources: [] });
@@ -314,8 +314,8 @@ else {
         await new Promise(resolve => setTimeout(resolve, 250));
         const canRead = await window.webContents.executeJavaScript('document.getElementById("task-00000000-0000-4000-8000-000000000001").innerText.includes("Read to me")');
         if (!canRead) throw new Error('Read button missing when summary is unavailable');
-        await writeFile('/tmp/sidekick-read-smoke.png', (await window.webContents.capturePage()).toPNG());
-        const readResult = await window.webContents.executeJavaScript('window.sidekick.action("00000000-0000-4000-8000-000000000001", "speak")');
+        await writeFile('/tmp/spawner-read-smoke.png', (await window.webContents.capturePage()).toPNG());
+        const readResult = await window.webContents.executeJavaScript('window.spawner.action("00000000-0000-4000-8000-000000000001", "speak")');
         if (!readResult.ok || !readStarted) throw new Error('Read action did not prepare the missing summary');
         engine.playbackEnded(readTask.id);
         window.webContents.send('state', engine.snapshot());
@@ -340,14 +340,14 @@ else {
           { at: traceAt - 10000, stage: 'Gate', status: 'ok' as const, message: 'Detection gates passed.' },
           { at: traceAt - 9000, stage: 'Replicas', status: 'pending' as const, message: 'Sending research to Replicas', data: { message: 'Research Electron menu-bar behavior using official documentation.' } },
           { at: traceAt - 8000, stage: 'Replicas', status: 'ok' as const, message: 'Replicas confirmed the workspace', durationMs: 1000, data: { replicaId: 'smoke-only' } },
-          { at: traceAt, stage: 'Answer', status: 'ok' as const, message: 'Answer ready in Sidekick', data: { sinceTaskCreatedMs: 12000 } },
+          { at: traceAt, stage: 'Answer', status: 'ok' as const, message: 'Answer ready in Spawner', data: { sinceTaskCreatedMs: 12000 } },
         ] };
         engine.diagnosticRuns = [{ ...trace, source: 'dictation' }];
         window.webContents.send('state', engine.snapshot());
         await window.webContents.executeJavaScript('document.querySelector("[data-tab=diagnostics]").click()');
         await new Promise(resolve => setTimeout(resolve, 100));
         if (!await window.webContents.executeJavaScript('document.getElementById("diagnostic-flow").innerText.includes("Dictation") && document.getElementById("diagnostic-flow").innerText.includes("Transcript")')) throw new Error('Dictation source missing from diagnostics');
-        await writeFile('/tmp/sidekick-dictation-diagnostics.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-dictation-diagnostics.png', (await window.webContents.capturePage()).toPNG());
         engine.diagnosticRuns = [trace];
         window.webContents.send('state', engine.snapshot());
         await window.webContents.executeJavaScript('document.querySelector("[data-tab=diagnostics]").click()');
@@ -355,15 +355,15 @@ else {
         const stages = await window.webContents.executeJavaScript('Array.from(document.querySelectorAll(".diagnostic-section-heading h2"), n => n.textContent).join(",")');
         if (stages !== 'Transcript Jev checked,Decision') throw new Error('Diagnostics is missing the transcript/window/score sequence');
         if (!await window.webContents.executeJavaScript('document.querySelector(".jev-request p").textContent === "Replicas: could you go research that and come back to me with an answer?" && document.querySelector(".trace-scores").innerText.includes("95%")')) throw new Error('Displayed score does not have its exact request window');
-        await writeFile('/tmp/sidekick-trace-complete.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-trace-complete.png', (await window.webContents.capturePage()).toPNG());
         // The primary transcript and result fit together at the app's minimum width.
         window.setSize(780, 630);
         await new Promise(resolve => setTimeout(resolve, 150));
         if (!await window.webContents.executeJavaScript('document.querySelector(".diagnostic-outcome").getBoundingClientRect().bottom < window.innerHeight && document.querySelector("main").scrollWidth === document.querySelector("main").clientWidth')) throw new Error('Compact diagnostics overflows the minimum window');
-        await writeFile('/tmp/sidekick-diagnostics-compact-small.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-diagnostics-compact-small.png', (await window.webContents.capturePage()).toPNG());
         window.setSize(940, 780);
         await window.webContents.executeJavaScript('document.querySelectorAll(".diagnostic-section")[1].scrollIntoView({block:"start"})');
-        await writeFile('/tmp/sidekick-trace-stages.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-trace-stages.png', (await window.webContents.capturePage()).toPNG());
         await window.webContents.executeJavaScript('var picker = document.getElementById("diagnostic-selection"); picker.value = "smoke-complete"; picker.dispatchEvent(new Event("change"))');
         const resumed = { id: 'smoke-resumed', source: 'resumed' as const, startedAt: traceAt + 1, request: 'macOS notification', taskId: readTask.id, events: [] };
         engine.diagnosticRuns.unshift(resumed);
@@ -389,7 +389,7 @@ else {
         await new Promise(resolve => setTimeout(resolve, 100));
         await window.webContents.executeJavaScript('var checkPicker = document.getElementById("jev-check-selection"); checkPicker.value = "1"; checkPicker.dispatchEvent(new Event("change"))');
         if (!await window.webContents.executeJavaScript('document.querySelector(".jev-request p").textContent === "You: Replicas." && document.querySelector(".trace-scores").innerText.includes("14%") && document.querySelector(".window-notice").innerText.includes("not in this check")')) throw new Error('Earlier Jev score was paired with the wrong window');
-        await writeFile('/tmp/sidekick-early-window.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-early-window.png', (await window.webContents.capturePage()).toPNG());
         await window.webContents.executeJavaScript('var checkPicker = document.getElementById("jev-check-selection"); checkPicker.value = "latest"; checkPicker.dispatchEvent(new Event("change"))');
         engine.diagnosticRuns.unshift({ id: 'ordinary-speech', source: 'live', startedAt: Date.now(), request: 'Thanks, that sounds good.', events: [{ at: Date.now(), stage: 'Transcript', status: 'ok', message: 'Ordinary speech' }] });
         window.webContents.send('state', engine.snapshot());
@@ -414,13 +414,13 @@ else {
         await window.webContents.executeJavaScript('document.querySelector("[data-tab=activity]").click()');
         await new Promise(resolve => setTimeout(resolve, 100));
         if (!await window.webContents.executeJavaScript('document.getElementById("tasks").innerText.includes("Implementing") && document.getElementById("tasks").innerText.includes("Implementation")')) throw new Error('Implementation task is labelled as research');
-        await writeFile('/tmp/sidekick-implementation-smoke.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-implementation-smoke.png', (await window.webContents.capturePage()).toPNG());
         engine.tasks[0]!.status = 'ready';
         window.webContents.send('state', engine.snapshot());
         await new Promise(resolve => setTimeout(resolve, 100));
         if (!await window.webContents.executeJavaScript('document.getElementById("tasks").innerText.includes("Ready to review")')) throw new Error('Implementation result not ready to review');
         // Archive preserves the answer and hides it from Inbox, with a working restore path.
-        const archived = await window.webContents.executeJavaScript('window.sidekick.action("00000000-0000-4000-8000-000000000001", "archive")');
+        const archived = await window.webContents.executeJavaScript('window.spawner.action("00000000-0000-4000-8000-000000000001", "archive")');
         if (!archived.ok || !store.tasks()[0]?.archivedAt) throw new Error('Archive was not persisted');
         window.webContents.send('state', engine.snapshot());
         await new Promise(resolve => setTimeout(resolve, 120));
@@ -430,9 +430,9 @@ else {
         await window.webContents.executeJavaScript('document.querySelector(".task-row").click()');
         if (!await window.webContents.executeJavaScript('document.querySelector("#task-detail .full-answer").open && document.querySelector(".app").inert')) throw new Error('History answer drawer failed');
         await new Promise(resolve => setTimeout(resolve, 300));
-        await writeFile('/tmp/sidekick-redesign-answer.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-redesign-answer.png', (await window.webContents.capturePage()).toPNG());
         await window.webContents.executeJavaScript('document.getElementById("close-task").click()');
-        const restored = await window.webContents.executeJavaScript('window.sidekick.action("00000000-0000-4000-8000-000000000001", "restore")');
+        const restored = await window.webContents.executeJavaScript('window.spawner.action("00000000-0000-4000-8000-000000000001", "restore")');
         if (!restored.ok || store.tasks()[0]?.archivedAt) throw new Error('Restore failed');
         // Stale logs stay selectable without appearing as current speech.
         engine.diagnosticRuns = [{ ...trace, startedAt: Date.now() - 120000, events: trace.events.map(event => ({ ...event, at: Date.now() - 120000 })) }];
@@ -441,7 +441,7 @@ else {
         await window.webContents.executeJavaScript('document.querySelector("[data-tab=diagnostics]").click()');
         if (!await window.webContents.executeJavaScript('document.getElementById("diagnostic-mode").textContent === "Latest run" && document.getElementById("diagnostic-flow").innerText.includes("could you go research")')) throw new Error('Latest check must remain inspectable and labelled as a check');
         await new Promise(resolve => setTimeout(resolve, 300));
-        await writeFile('/tmp/sidekick-redesign-idle-diagnostics.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-redesign-idle-diagnostics.png', (await window.webContents.capturePage()).toPNG());
         engine.diagnosticRuns = [];
         engine.watcher.diagnostics.reads = [{ at: Date.now(), modifiedAt: Date.now(), file: '/smoke/baseline.ndjson', reason: 'No fresh entries: already seen.', parsedCount: 1, freshIds: [], entries: [{ id: 'old-line', speaker: 'You', epoch: Date.now() - 120000, text: 'Old baseline transcript' }] }];
         window.webContents.send('state', engine.snapshot());
@@ -450,12 +450,12 @@ else {
         engine.remove(readTask.id);
         engine.models = models;
         await window.webContents.executeJavaScript('document.querySelector("[data-tab=activity]").click()');
-        const paused = await window.webContents.executeJavaScript('window.sidekick.saveSettings({enabled:false})');
+        const paused = await window.webContents.executeJavaScript('window.spawner.saveSettings({enabled:false})');
         if (!paused.ok || paused.value.settings.enabled) throw new Error('Pause persistence failed');
-        await window.webContents.executeJavaScript('window.sidekick.saveSettings({enabled:true})');
+        await window.webContents.executeJavaScript('window.spawner.saveSettings({enabled:true})');
         engine.tasks = [
           { ...readTask, id: '00000000-0000-4000-8000-000000000002', title: 'Add a notification bell', mode: 'implementation', status: 'researching', answer: undefined, error: undefined },
-          { ...readTask, id: '00000000-0000-4000-8000-000000000003', title: 'Compare realtime voice models', mode: 'research', status: 'ready', error: undefined, spokenAnswer: 'Use a streaming speech model for live conversation. For Sidekick’s short, on-demand summaries, the current text-to-speech setup is a better fit.', answer: '## Recommendation\nKeep the current on-demand speech flow. It fits the way Sidekick is used during calls.\n\n- **Streaming voice** is useful for a continuous conversation.\n- **Text to speech** is simpler for a short answer after an agent finishes.\n\n### What changes next\nAdd a visible playback state and keep speech opt-in. The `Read to me` button should always be one click away.\n\nSee the [official documentation](https://example.com/docs) for the comparison.', replicaId: 'fixture' },
+          { ...readTask, id: '00000000-0000-4000-8000-000000000003', title: 'Compare realtime voice models', mode: 'research', status: 'ready', error: undefined, spokenAnswer: 'Use a streaming speech model for live conversation. For Spawner’s short, on-demand summaries, the current text-to-speech setup is a better fit.', answer: '## Recommendation\nKeep the current on-demand speech flow. It fits the way Spawner is used during calls.\n\n- **Streaming voice** is useful for a continuous conversation.\n- **Text to speech** is simpler for a short answer after an agent finishes.\n\n### What changes next\nAdd a visible playback state and keep speech opt-in. The `Read to me` button should always be one click away.\n\nSee the [official documentation](https://example.com/docs) for the comparison.', replicaId: 'fixture' },
           { ...readTask, id: '00000000-0000-4000-8000-000000000004', title: 'Create the Linear issue for mobile feedback', mode: 'implementation', status: 'needs_attention', answer: undefined, error: 'The agent needs to know which project should own the issue.', replicaId: 'fixture' },
         ];
         secrets.gateway = 'smoke-fixture'; secrets.replicas = 'smoke-fixture';
@@ -463,15 +463,15 @@ else {
         window.webContents.send('state', engine.snapshot());
         await window.webContents.executeJavaScript('document.querySelector("[data-tab=activity]").click()');
         await new Promise(resolve => setTimeout(resolve, 300));
-        await writeFile('/tmp/sidekick-redesign-inbox.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-redesign-inbox.png', (await window.webContents.capturePage()).toPNG());
         await window.webContents.executeJavaScript('Array.from(document.querySelectorAll("[data-task]")).find(row => row.dataset.task === "00000000-0000-4000-8000-000000000003").click()');
         await new Promise(resolve => setTimeout(resolve, 300));
-        await writeFile('/tmp/sidekick-redesign-rich-answer.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-redesign-rich-answer.png', (await window.webContents.capturePage()).toPNG());
         await window.webContents.executeJavaScript('document.getElementById("close-task").click()');
         window.setSize(780, 630);
         await new Promise(resolve => setTimeout(resolve, 300));
         if (await window.webContents.executeJavaScript('document.documentElement.scrollWidth > window.innerWidth')) throw new Error('Layout overflows minimum window width');
-        await writeFile('/tmp/sidekick-redesign-compact.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-redesign-compact.png', (await window.webContents.capturePage()).toPNG());
         // User controls go through the real preload/IPC and engine. Only the model
         // and remote agent are fixture substitutes in this renderer smoke check.
         window.setSize(940, 780);
@@ -490,7 +490,7 @@ else {
         await new Promise(resolve => setTimeout(resolve, 1800));
         if (!await window.webContents.executeJavaScript('document.querySelector(".request-status").textContent === "Ready to send" && document.querySelector(".request-transcript").textContent.includes("Do not implement anything") && !document.querySelector("[data-request-action=send]").disabled')) throw new Error('Ready request preview failed');
         await new Promise(resolve => setTimeout(resolve, 300));
-        await writeFile('/tmp/sidekick-request-ready.png', (await window.webContents.capturePage()).toPNG());
+        await writeFile('/tmp/spawner-request-ready.png', (await window.webContents.capturePage()).toPNG());
         await window.webContents.executeJavaScript('document.querySelector("[data-request-action=send]").click()');
         await new Promise(resolve => setTimeout(resolve, 200));
         if (captureCreates !== 1 || engine.snapshot().requests.length) throw new Error('Send now UI did not create exactly one handoff');
@@ -504,11 +504,11 @@ else {
         if (captureCreates !== 1 || engine.snapshot().requests.length || !await window.webContents.executeJavaScript('document.getElementById("request-capture").classList.contains("hidden")')) throw new Error('Cancel UI left a pending or launched request');
         engine.models = oldModels; engine.replicas = oldReplicas;
         if (process.argv.includes('--design-preview')) return;
-        console.log(JSON.stringify({ smoke: 'passed', node: process.versions.node, electron: process.versions.electron, watcher: state.value.watcher, screenshot: '/tmp/sidekick-smoke.png' }));
+        console.log(JSON.stringify({ smoke: 'passed', node: process.versions.node, electron: process.versions.electron, watcher: state.value.watcher, screenshot: '/tmp/spawner-smoke.png' }));
         app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }
     }
-  }).catch(error => { console.error('Sidekick startup failed:', error); app.exit(1); });
+  }).catch(error => { console.error('Spawner startup failed:', error); app.exit(1); });
 }
 app.on('before-quit', () => {
   quitting = true; clearInterval(timer); clearTimeout(broadcastTimer);

@@ -19,7 +19,7 @@ if (!env.AI_GATEWAY_API_KEY) {
     });
   });
   env.AI_GATEWAY_API_KEY = credentials.gateway;
-  env.SIDEKICK_EVAL_SETTINGS = JSON.stringify(credentials.settings);
+  env.SPAWNER_EVAL_SETTINGS = JSON.stringify(credentials.settings);
 }
 await mkdir('evals/results', { recursive: true });
 const args = process.argv.slice(2);

@@ -11,7 +11,7 @@ import { Store } from '../src/store.js';
 import type { Settings } from '../src/types.js';
 
 async function fixture() {
-  const home = await mkdtemp(join(tmpdir(), 'sidekick-t3-'));
+  const home = await mkdtemp(join(tmpdir(), 'spawner-t3-'));
   await mkdir(join(home, 'userdata'));
   await writeFile(join(home, 'userdata/server-runtime.json'), JSON.stringify({ origin: 'http://127.0.0.1:3773' }));
   const connection: T3Connection = { token: 'private-test-token', expiresAt: Date.now() + 3600000, environmentId: 'local-env' };
@@ -39,7 +39,7 @@ async function fixture() {
     throw new Error('Unexpected endpoint');
   }) as typeof fetch;
   const client = new T3(() => connection, async () => {}, fetcher, home);
-  const store = new Store(join(home, 'sidekick'));
+  const store = new Store(join(home, 'spawner'));
   const settings: Settings = { enabled: true, launchAtLogin: false, wisprDirectory: '/missing', environmentId: '', environmentName: '', decisionModel: 'test', textModel: 'test', speechModel: 'test', voice: 'test', t3ProjectId: 'project', t3ProjectName: 'Local project' };
   let cloudCalls = 0, summaries = 0;
   const cloud = async (): Promise<any> => { cloudCalls++; throw new Error('Must not call Replicas'); };

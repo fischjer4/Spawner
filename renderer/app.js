@@ -1,4 +1,4 @@
-const api = window.sidekick;
+const api = window.spawner;
 const $ = id => document.getElementById(id);
 let state;
 let tab = 'activity';

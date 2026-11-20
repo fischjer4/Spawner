@@ -13,7 +13,7 @@ import type { Settings, ResearchTask, Meeting, Decision, TaskMode } from '../src
 
 const settings: Settings = { enabled: true, launchAtLogin: false, wisprDirectory: '/missing', environmentId: 'env', environmentName: 'Test', decisionModel: 'test', textModel: 'test', speechModel: 'test', voice: 'test' };
 const result = { status: 'answer', answer: 'Supported with configuration.', spokenAnswer: 'It works once the administrator enables SSO.', sources: [{ title: 'Docs', url: 'https://example.com/docs' }] };
-const envelope = `<sidekick-result>${JSON.stringify(result)}</sidekick-result>`;
+const envelope = `<spawner-result>${JSON.stringify(result)}</spawner-result>`;
 const history = { events: [{ type: 'claude-assistant', payload: { message: { role: 'assistant', content: [{ type: 'text', text: envelope }] } } }] };
 const task = (): ResearchTask => ({ id: crypto.randomUUID(), meetingId: 'meeting', title: 'SSO', question: 'Does SSO work?', context: '', createdAt: Date.now(), status: 'ready', spokenAnswer: 'Yes.' });
 
@@ -27,12 +27,12 @@ test('transcript parsing ignores incomplete writes, preserves source and uses fi
 });
 
 test('wake names recognize ASR variants, not substrings', () => {
-  for (const text of ['T three, look it up', 'Replicas go find out', 'Sidekick, check that']) assert.equal(hasWakeName(text), true);
+  for (const text of ['T three, look it up', 'Replicas go find out', 'Spawner, check that']) assert.equal(hasWakeName(text), true);
   assert.equal(hasWakeName('The replicaSet changed'), false);
 });
 
 test('real file watcher ignores history and cloud sync, emits new speech once and expires idle meetings', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'sidekick-watch-'));
+  const root = await mkdtemp(join(tmpdir(), 'spawner-watch-'));
   let now = Date.now();
   const db = new DatabaseSync(join(root, 'flow.sqlite'));
   db.exec('CREATE TABLE Meetings(id TEXT,title TEXT,endedAt INTEGER,isDeleted INTEGER,isTourDemo INTEGER)');
@@ -69,7 +69,7 @@ test('extracts provider answers but never treats a tool result as an assistant a
   assert.equal(extractAnswer({ events: [{ type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: envelope }] } }] }).result?.status, 'answer');
   assert.equal(extractAnswer({ codex_asp_transcript: { turns: [{ items: [{ type: 'agentMessage', text: envelope }] }] } }).result?.status, 'answer');
   assert.equal(extractAnswer({ events: [{ type: 'claude-assistant', payload: { inputRequest: { status: 'pending' } } }] }).pending, true);
-  assert.equal(extractAnswer({ events: [{ type: 'claude-assistant', payload: { message: { content: [{ type: 'text', text: '<sidekick-result>bad json</sidekick-result>' }] } } }] }).result, null);
+  assert.equal(extractAnswer({ events: [{ type: 'claude-assistant', payload: { message: { content: [{ type: 'text', text: '<spawner-result>bad json</spawner-result>' }] } } }] }).result, null);
 });
 
 test('Replicas request uses retained lifecycle and scoped environment, and never retries a create', async () => {
@@ -89,7 +89,7 @@ test('Replicas request uses retained lifecycle and scoped environment, and never
 });
 
 async function setupEngine(timing = { ...LIVE_REQUEST_TIMING, settleMs: 0 }) {
-  const directory = await mkdtemp(join(tmpdir(), 'sidekick-engine-'));
+  const directory = await mkdtemp(join(tmpdir(), 'spawner-engine-'));
   const store = new Store(directory);
   let creates = 0;
   const decisions: Decision[] = [];
@@ -152,7 +152,7 @@ test('a lost creation response is reconciled by name without creating a duplicat
     let recoveredName = '';
     f.replicas.findByName = async name => { recoveredName = name; return 'replica'; };
     await f.engine.refresh(id);
-    assert.equal(recoveredName, `sidekick-${id}`);
+    assert.equal(recoveredName, `spawner-${id}`);
     assert.equal(f.engine.tasks[0].workspaceName, 'does-sso-work');
     assert.equal(f.engine.tasks[0].replicaId, 'replica'); assert.equal(f.engine.tasks[0].status, 'ready');
   } finally { await f.cleanup(); }
@@ -236,7 +236,7 @@ test('normal Replicas prose is preserved, summarized once, and remains silent', 
     assert.equal(new URL(replicaLink('workspace-123')).searchParams.get('path'), '/workspace/workspace-123');
     const prompt = taskPrompt({ question: 'Does SSO work?', context: '' });
     assert.ok(prompt.includes('Current request:\nDoes SSO work?'));
-    assert.ok(!prompt.includes('sidekick-result') && !prompt.includes('spokenAnswer'));
+    assert.ok(!prompt.includes('spawner-result') && !prompt.includes('spokenAnswer'));
   } finally { await f.cleanup(); }
 });
 
@@ -390,7 +390,7 @@ test('a request arriving during another launch is evaluated after that request f
 });
 
 test('resumed speech and final transcript flush pass an ended marker without replaying history', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'sidekick-resume-'));
+  const root = await mkdtemp(join(tmpdir(), 'spawner-resume-'));
   let now = Date.now();
   const db = new DatabaseSync(join(root, 'flow.sqlite'));
   db.exec('CREATE TABLE Meetings(id TEXT,title TEXT,endedAt INTEGER,isDeleted INTEGER,isTourDemo INTEGER)');
@@ -433,7 +433,7 @@ function insertDictation(db: DatabaseSync, id: string, at: number, text: string,
 }
 
 test('dictation watcher waits for completion, prefers original speech, ignores edits/history/mobile, and works without Notetaker', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'sidekick-dictation-'));
+  const root = await mkdtemp(join(tmpdir(), 'spawner-dictation-'));
   const db = createDictationHistory(root);
   let now = Date.now();
   const received: Meeting[] = [];
@@ -473,7 +473,7 @@ test('dictation watcher waits for completion, prefers original speech, ignores e
 
 test('completed dictations use the real watcher → Jev → Replicas path once, with separate context and notifications', async () => {
   const f = await setupEngine();
-  const root = await mkdtemp(join(tmpdir(), 'sidekick-dictation-flow-'));
+  const root = await mkdtemp(join(tmpdir(), 'spawner-dictation-flow-'));
   const db = createDictationHistory(root);
   const checked: { context: string; request: string }[] = [];
   f.engine.models.decide = async (context, request) => { checked.push({ context, request }); return { invoked: 0.95, complete: 0.9, destination: 'replicas', action: 'research' }; };
@@ -771,7 +771,7 @@ test('a cancelled launch with a lost reply recovers and stops the original works
     const client = {
       ...f.replicas,
       findByName: async (name: string) => {
-        assert.equal(name, `sidekick-${task.id}`);
+        assert.equal(name, `spawner-${task.id}`);
         return 'original-workspace';
       },
       wait: async () => ({ done: false, status: 'running', chats: [{ id: 'original-chat', processing: true }] }),
@@ -789,7 +789,7 @@ test('a cancelled launch with a lost reply recovers and stops the original works
 
 test('Wispr reads a correction and other tasks finish while one agent poll is waiting', async () => {
   const f = await setupEngine({ debounceMs: 60000, settleMs: 60000, idleMs: 120000, maxMs: 180000 });
-  const root = await mkdtemp(join(tmpdir(), 'sidekick-monitor-'));
+  const root = await mkdtemp(join(tmpdir(), 'spawner-monitor-'));
   const db = new DatabaseSync(join(root, 'flow.sqlite'));
   let release!: (state: Awaited<ReturnType<typeof f.replicas.wait>>) => void;
   const held = new Promise<Awaited<ReturnType<typeof f.replicas.wait>>>(resolve => { release = resolve; });

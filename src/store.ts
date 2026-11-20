@@ -6,7 +6,7 @@ export class Store {
   private db: DatabaseSync;
   constructor(directory: string) {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
-    const file = join(directory, 'sidekick.sqlite');
+    const file = join(directory, 'spawner.sqlite');
     this.db = new DatabaseSync(file);
     chmodSync(file, 0o600);
     this.db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS handled (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL);');

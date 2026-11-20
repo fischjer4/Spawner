@@ -30,7 +30,7 @@ export class ReplicasDestination implements AgentDestination {
     if (!credentials.replicas || !settings.environmentId) throw new UserFacingError('Connect Replicas and choose an environment in Settings.');
     const mode = task.mode ?? 'research';
     const message = taskPrompt(task);
-    const name = `sidekick-${task.id}`;
+    const name = `spawner-${task.id}`;
     task.workspaceName = name;
     checkpoint();
     const started = Date.now();
@@ -40,7 +40,7 @@ export class ReplicasDestination implements AgentDestination {
       task.replicaId = await this.client.create(name, settings.environmentId, message, mode);
     } catch (error) {
       if (error instanceof ApiError && error.status < 500) throw error;
-      throw new UserFacingError('Launch was not confirmed. Refresh checks for the existing workspace; Sidekick will not launch a duplicate.', { cause: error });
+      throw new UserFacingError('Launch was not confirmed. Refresh checks for the existing workspace; Spawner will not launch a duplicate.', { cause: error });
     }
     task.lastMessageAt = Date.now();
     checkpoint();
@@ -61,7 +61,7 @@ export class ReplicasDestination implements AgentDestination {
 
   private async nameWorkspace(id: string): Promise<void> {
     const { task, record, checkpoint } = this.context;
-    if (task.workspaceName !== `sidekick-${task.id}`) return;
+    if (task.workspaceName !== `spawner-${task.id}`) return;
     const name = task.title.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80).replace(/-+$/, '') || 'research';
     try {
       await this.client.rename(id, name);
@@ -127,7 +127,7 @@ export class T3Destination implements AgentDestination {
     try {
       await this.client.create(task, project);
     } catch (error) {
-      const message = 'T3 launch was not confirmed. Refresh checks the existing thread; Sidekick will not launch a duplicate.';
+      const message = 'T3 launch was not confirmed. Refresh checks the existing thread; Spawner will not launch a duplicate.';
       throw new T3Error(message, { cause: error });
     }
     record('T3', 'T3 Code accepted the local thread', 'ok', { threadId: task.t3ThreadId });

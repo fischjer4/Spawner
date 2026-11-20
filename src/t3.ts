@@ -58,7 +58,7 @@ export class T3 {
     const response = await this.fetcher(`${origin}/.well-known/t3/environment`, { signal: AbortSignal.timeout(2500), redirect: 'error' });
     if (!response.ok) throw new T3Error('T3 Code is not responding. Open it and reconnect in Settings.');
     const descriptor = z.object({ environmentId: z.string(), orchestrationProtocolVersion: z.literal(1) }).safeParse(await response.json());
-    if (!descriptor.success) throw new T3Error('This T3 Code version uses an unsupported API. Update the Sidekick integration.');
+    if (!descriptor.success) throw new T3Error('This T3 Code version uses an unsupported API. Update the Spawner integration.');
     return descriptor.data;
   }
   async connect(): Promise<void> {
@@ -88,15 +88,15 @@ export class T3 {
     try {
       const { stdout } = await execute(join(app, 'Contents/MacOS', basename(app, '.app')), [
         join(app, 'Contents/Resources/app.asar/apps/server/dist/bin.mjs'),
-        'auth', 'pairing', 'create', '--base-dir', this.home, '--ttl', '5m', '--label', 'Sidekick', '--json',
+        'auth', 'pairing', 'create', '--base-dir', this.home, '--ttl', '5m', '--label', 'Spawner', '--json',
       ], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, timeout: 15000, maxBuffer: 65536 });
       credential = z.object({ credential: z.string() }).parse(JSON.parse(stdout)).credential;
-    } catch { throw new T3Error('T3 Code could not authorize Sidekick. Check that the installed app supports local pairing.'); }
+    } catch { throw new T3Error('T3 Code could not authorize Spawner. Check that the installed app supports local pairing.'); }
     const response = await this.fetcher(`${origin}/oauth/token`, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, redirect: 'error', signal: AbortSignal.timeout(10000),
       body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange', subject_token: credential,
         subject_token_type: 'urn:t3:params:oauth:token-type:environment-bootstrap', requested_token_type: 'urn:ietf:params:oauth:token-type:access_token',
-        scope: 'orchestration:read orchestration:operate', client_label: 'Sidekick', client_device_type: 'bot', client_os: 'macOS' }),
+        scope: 'orchestration:read orchestration:operate', client_label: 'Spawner', client_device_type: 'bot', client_os: 'macOS' }),
     });
     if (!response.ok) throw new T3Error(`T3 Code pairing failed (${response.status}). Reconnect in Settings.`);
     const auth = z.object({ access_token: z.string(), expires_in: z.number() }).parse(await response.json());
@@ -133,14 +133,14 @@ export class T3 {
     // The HTTP API requires an explicit thread.create before thread.turn.start.
     // Keep both command IDs stable; never retry an ambiguous write automatically.
     await this.request('/api/orchestration/dispatch', task.t3EnvironmentId, {
-      type: 'thread.create', commandId: `sidekick-create-${task.id}`, threadId: task.t3ThreadId,
+      type: 'thread.create', commandId: `spawner-create-${task.id}`, threadId: task.t3ThreadId,
       projectId: project.id, title: task.title, modelSelection: project.modelSelection,
       runtimeMode: 'approval-required', interactionMode: task.mode === 'implementation' ? 'default' : 'plan',
       branch: null, worktreePath: null, createdAt,
     });
     await this.request('/api/orchestration/dispatch', task.t3EnvironmentId, {
       type: 'thread.turn.start', commandId: task.id, threadId: task.t3ThreadId,
-      message: { messageId: `sidekick-${task.id}`, role: 'user', text: taskPrompt(task), attachments: [] },
+      message: { messageId: `spawner-${task.id}`, role: 'user', text: taskPrompt(task), attachments: [] },
       modelSelection: project.modelSelection, runtimeMode: 'approval-required', interactionMode: task.mode === 'implementation' ? 'default' : 'plan', createdAt,
     });
   }

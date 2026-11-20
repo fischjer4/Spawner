@@ -133,7 +133,7 @@ export class TranscriptWatcher {
         if (!entries.length) read.rawTail = raw.slice(-12000);
         this.files.set(file, { mtime: metadata.mtimeMs, ids: new Set(entries.map(e => e.id)) });
         // On restart we inspect existing text but never replay earlier commands.
-        if (!this.baseline) { remember('Startup baseline: existing text displayed, not replayed. Speak again after Sidekick starts.'); continue; }
+        if (!this.baseline) { remember('Startup baseline: existing text displayed, not replayed. Speak again after Spawner starts.'); continue; }
         const info = this.info(dir.name);
         if (!info || info.isDeleted || info.isTourDemo) { remember(!info ? 'Skipped: meeting metadata could not be read from flow.sqlite.' : 'Skipped: deleted or demo meeting.'); continue; }
         const fresh = entries.filter(e => !previous?.ids.has(e.id) && isFresh(e, now, this.startedAt));
@@ -167,7 +167,7 @@ export class TranscriptWatcher {
 }
 
 export function hasWakeName(text: string): boolean {
-  return /\b(?:replicas?|t\s*(?:3|three)|tee\s*three|sidekick)\b/i.test(text);
+  return /\b(?:replicas?|t\s*(?:3|three)|tee\s*three|spawner)\b/i.test(text);
 }
 export function conversation(entries: Entry[]): string {
   const turns: { speaker: string; text: string }[] = [];

@@ -5,8 +5,8 @@ import { runTriggerCase } from './run-trigger-case.js';
 import { outcomes } from './trigger-scoring.js';
 
 for (const [name, cases] of [['Incident regressions', regressionCases], ['Additional phrasing', additionalCases], ['Delegated requests', delegationCases], ['Task modes', taskModeCases], ['Streaming requests', streamingCases], ['Request capture', captureCases]] as const) {
-  if (process.env.SIDEKICK_EVAL_SUITE && process.env.SIDEKICK_EVAL_SUITE !== name) continue;
-  evalite(`Sidekick trigger · ${name}`, {
+  if (process.env.SPAWNER_EVAL_SUITE && process.env.SPAWNER_EVAL_SUITE !== name) continue;
+  evalite(`Spawner trigger · ${name}`, {
     data: dataset(cases),
     trialCount: 2,
     task: input => runTriggerCase(input, reportTrace),

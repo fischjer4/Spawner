@@ -4,7 +4,7 @@ import type { TaskMode } from '../src/types.js';
 type RecordingState = 'previously-ended' | 'final-flush';
 export interface TriggerInput { arrivalOffsetsMs?: number[]; finalWaitMs?: number; chunkSpeakers?: string[][]; chunkSpeakerIds?: number[][]; control?: 'send' | 'cancel'; source?: 'dictation'; recordingState?: RecordingState; name: string; prior: string; chunks: string[][] }
 export interface TriggerExpected { lastTurn?: 'collecting' | 'ready' | 'not_request'; mode?: TaskMode; request?: string; context?: string; launches: number; cancelled: boolean; perChunkLaunches: number[] }
-interface TriggerCase { request?: string; lastTurn?: 'collecting' | 'ready' | 'not_request'; arrivalOffsetsMs?: number[]; finalWaitMs?: number; chunkSpeakers?: string[][]; chunkSpeakerIds?: number[][]; control?: 'send' | 'cancel'; mode?: TaskMode; source?: 'dictation'; prior?: string; recordingState?: RecordingState; name: string; chunks: string[][]; launch: boolean; cancel?: boolean }
+interface TriggerCase { launchChunkIndex?: number; request?: string; lastTurn?: 'collecting' | 'ready' | 'not_request'; arrivalOffsetsMs?: number[]; finalWaitMs?: number; chunkSpeakers?: string[][]; chunkSpeakerIds?: number[][]; control?: 'send' | 'cancel'; mode?: TaskMode; source?: 'dictation'; prior?: string; recordingState?: RecordingState; name: string; chunks: string[][]; launch: boolean; cancel?: boolean }
 const prior = 'We are discussing whether an approved application lets someone change jobs before the next stage is approved.';
 const command = 'Replicas: could you go research that and come back to me with an answer?';
 export const regressionCases: TriggerCase[] = [
@@ -41,10 +41,13 @@ export const delegationCases: TriggerCase[] = [
 ];
 
 export function dataset(cases: TriggerCase[]) {
-  return cases.map(c => ({
-    input: { name: c.name, prior: c.prior ?? prior, chunks: c.chunks, recordingState: c.recordingState, source: c.source, arrivalOffsetsMs: c.arrivalOffsetsMs, finalWaitMs: c.finalWaitMs, chunkSpeakers: c.chunkSpeakers, chunkSpeakerIds: c.chunkSpeakerIds, control: c.control },
-    expected: { lastTurn: c.lastTurn, mode: c.mode ?? 'research', request: c.request ?? 'You: ' + c.chunks.flat().join(' '), context: c.source === 'dictation' ? '' : 'You: ' + (c.prior ?? prior), launches: c.launch ? 1 : 0, cancelled: !!c.cancel, perChunkLaunches: c.chunks.map((_, index) => c.launch && index === c.chunks.length - 1 ? 1 : 0) },
-  }));
+  return cases.map(c => {
+    const launchChunkIndex = c.launchChunkIndex ?? c.chunks.length - 1;
+    return {
+      input: { name: c.name, prior: c.prior ?? prior, chunks: c.chunks, recordingState: c.recordingState, source: c.source, arrivalOffsetsMs: c.arrivalOffsetsMs, finalWaitMs: c.finalWaitMs, chunkSpeakers: c.chunkSpeakers, chunkSpeakerIds: c.chunkSpeakerIds, control: c.control },
+      expected: { lastTurn: c.lastTurn, mode: c.mode ?? 'research', request: c.request ?? 'You: ' + c.chunks.slice(0, launchChunkIndex + 1).flat().join(' '), context: c.source === 'dictation' ? '' : 'You: ' + (c.prior ?? prior), launches: c.launch ? 1 : 0, cancelled: !!c.cancel, perChunkLaunches: c.chunks.map((_, index) => c.launch && index >= launchChunkIndex ? 1 : 0) },
+    };
+  });
 }
 
 export const taskModeCases: TriggerCase[] = [
@@ -71,11 +74,11 @@ const trialRequest = [
   'No need to implement anything. I just want you to help do some research into how we should facilitate this, and think about how other SaaS apps have this type of product-led growth as well.',
 ];
 export const streamingCases: TriggerCase[] = [
-  { name: 'reported standalone wake followed by full trial research request', prior: trialContext, chunks: trialRequest.map(text => [text]), arrivalOffsetsMs: [0, 12120, 22320], finalWaitMs: 17000, launch: true },
-  { name: 'request starts together but research-only scope arrives later', prior: trialContext, chunks: [[trialRequest[0] + ' ' + trialRequest[1]], [trialRequest[2]]], arrivalOffsetsMs: [0, 10200], finalWaitMs: 17000, launch: true },
+  { name: 'reported standalone wake followed by full trial research request', prior: trialContext, chunks: trialRequest.map(text => [text]), arrivalOffsetsMs: [0, 12120, 22320], launchChunkIndex: 1, finalWaitMs: 17000, launch: true },
+  { name: 'request starts together but research-only scope arrives later', prior: trialContext, chunks: [[trialRequest[0] + ' ' + trialRequest[1]], [trialRequest[2]]], arrivalOffsetsMs: [0, 10200], launchChunkIndex: 0, finalWaitMs: 17000, launch: true },
   { name: 'continuous request longer than thirty seconds', prior: trialContext, chunks: [['Replicas.'], ['Can you research how'], ['our signup flow and Stripe code should support a no-card Pro trial,'], ['including team invites and what happens when the trial expires,'], ['and come back with a plan? Do not implement anything.']], arrivalOffsetsMs: [0, 10000, 20000, 30000, 40000], finalWaitMs: 17000, launch: true },
-  { name: 'implementation corrected to research in a delayed scope clause', prior: trialContext, chunks: [['Replicas, change signup to start a Pro trial without asking for a card.'], ['Actually, do not change code yet. Just research our Stripe setup and come back with a plan.']], arrivalOffsetsMs: [0, 10000], finalWaitMs: 17000, launch: true },
-  { name: 'request withdrawn in next transcript update', prior: trialContext, chunks: [['Replicas, implement the no-card Pro trial.'], ['Actually, never mind. Do not start that task.']], arrivalOffsetsMs: [0, 10000], finalWaitMs: 17000, launch: false },
+  { name: 'implementation corrected to research in a delayed scope clause', prior: trialContext, chunks: [['Replicas, change signup to start a Pro trial without asking for a card.'], ['Actually, do not change code yet. Just research our Stripe setup and come back with a plan.']], arrivalOffsetsMs: [0, 3000], finalWaitMs: 17000, launch: true },
+  { name: 'request withdrawn in next transcript update', prior: trialContext, chunks: [['Replicas, implement the no-card Pro trial.'], ['Actually, never mind. Do not start that task.']], arrivalOffsetsMs: [0, 3000], finalWaitMs: 17000, launch: false },
   { name: 'bare wake alone cannot launch from context', prior: trialContext, chunks: [['Replicas.']], finalWaitMs: 17000, launch: false },
   { name: 'another speaker cannot inherit an unfinished wake', prior: trialContext, chunks: [['Replicas.'], ['Can you change the signup flow to start a Pro trial?']], chunkSpeakers: [['You'], ['Them']], arrivalOffsetsMs: [0, 10000], finalWaitMs: 17000, launch: false },
   { name: 'product mention does not carry into an unrelated request', prior: trialContext, chunks: [['The word Replicas is a wake name in this product. I am explaining how it works.'], ['Can you change the signup flow to start a Pro trial?']], arrivalOffsetsMs: [0, 10000], finalWaitMs: 17000, launch: false },

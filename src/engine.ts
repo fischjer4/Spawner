@@ -8,7 +8,7 @@ import { FinishedAnswers, replaceAnswer } from './answers.js';
 import { ReplicasDestination, T3Destination, type AgentDestination, type CloudClient, type LocalClient } from './agent-destinations.js';
 import { TaskMonitor } from './task-monitor.js';
 
-export const LIVE_REQUEST_TIMING = { debounceMs: 1500, settleMs: 15000, idleMs: 60000, maxMs: 180000 };
+export const LIVE_REQUEST_TIMING = { debounceMs: 1500, settleMs: 4000, idleMs: 60000, maxMs: 180000 };
 interface Candidate {
   meeting: Meeting;
   entries: Entry[];

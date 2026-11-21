@@ -30,7 +30,7 @@ const defaults: Settings = {
   enabled: true, launchAtLogin: true,
   wisprDirectory: join(homedir(), 'Library/Application Support/Wispr Flow'),
   environmentId: '', environmentName: '', t3ProjectId: '', t3ProjectName: '', decisionModel: 'typesafe-ai/jev-1.14.0',
-  textModel: 'google/gemini-2.5-flash', speechModel: 'google/gemini-3.8-flash-lite-tts', voice: 'Kore',
+  textModel: 'openai/gpt-6-luna', speechModel: 'google/gemini-3.8-flash-lite-tts', voice: 'Kore',
 };
 const settingsSchema = z.object({
   enabled: z.boolean().optional(), launchAtLogin: z.boolean().optional(),

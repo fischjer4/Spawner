@@ -22,7 +22,7 @@ export async function runTriggerCase(input: TriggerInput, report: (trace: Trace)
   const file = join(flow, 'meetings/test/live.ndjson'); await writeFile(file, '');
   const store = new Store(join(root, 'spawner'));
   const saved = JSON.parse(process.env.SPAWNER_EVAL_SETTINGS || '{}');
-  const settings: Settings = { enabled: true, launchAtLogin: false, environmentId: 'eval-only', environmentName: 'Evaluation', decisionModel: 'typesafe-ai/jev-1.14.0', textModel: 'google/gemini-2.5-flash', speechModel: '', voice: '', ...saved, wisprDirectory: flow };
+  const settings: Settings = { enabled: true, launchAtLogin: false, environmentId: 'eval-only', environmentName: 'Evaluation', decisionModel: 'typesafe-ai/jev-1.14.0', textModel: 'openai/gpt-6-luna', speechModel: '', voice: '', ...saved, wisprDirectory: flow };
   const models = new Models(() => key, () => settings);
   const decisions: Decision[] = [];
   const handoffs: { message: string; plan_mode: boolean; request: string; context: string }[] = [];

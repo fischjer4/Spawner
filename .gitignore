@@ -3,6 +3,7 @@ dist/
 release/
 *.log
 .env*
+!/.env.example
 .DS_Store
 evals/results/*.sqlite*
 evals/results/*.json

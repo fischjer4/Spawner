@@ -1,5 +1,7 @@
 # Spawner
 
+Clone this repo and tell your AI to read the README to get it set up for you, and it will.
+
 Spawner runs in your Mac's menu bar. Type a question or dictate it with Wispr Flow. Replicas runs the task in the cloud, or T3 Code runs it in a project on your Mac. You'll find the answer in your Inbox.
 
 You'll need a Vercel AI Gateway key for either agent. Replicas also needs a personal API key. T3 Code pairs with Spawner on your Mac. Enter your keys in Settings under Connections. The desktop app needs no environment variables or `.env` file.
@@ -37,6 +39,8 @@ If typed requests work but speech doesn't appear in Diagnostics, check the Wispr
 Run `npm run check` and `npm test` locally without keys. To test the Electron app with a fresh data folder, run `SPAWNER_TEST_DATA="$(mktemp -d)" npm run smoke`.
 
 The optional speech-routing evaluations make paid Gateway calls. Install their dependencies with `npm ci --prefix evals`, then run `npm run eval`.
+
+To keep evaluation overrides locally, copy [`.env.example`](.env.example) to `.env` and follow the loading instructions in the file.
 
 | Environment variable | When to use it |
 | --- | --- |
